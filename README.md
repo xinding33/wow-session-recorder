@@ -1,5 +1,154 @@
-<img src="assets/icon.svg" width="64" height="64" alt="">
+<img src="assets/icon.png" width="96" height="96" alt="">
 
-# wow-session-recorder
+# WoW Session Recorder
+
+A lightweight macOS menu bar app that records retail World of Warcraft and turns your
+combat log into a reviewable library: every boss pull, Mythic+ key, arena match and death,
+each one click away.
 
 Created in [T3 Code](https://t3.codes).
+
+## How it works
+
+- **Capture.** While WoW is running, [ScreenCaptureKit](https://developer.apple.com/documentation/screencapturekit)
+  records only the WoW window (no notifications or other apps) plus game audio. Video is
+  encoded as HEVC on Apple Silicon's media engine into one-minute segment files.
+- **Labelling.** The app follows `_retail_/Logs/WoWCombatLog-*.txt` and turns events into
+  activities:
+  - `CHALLENGE_MODE_START/END` → a Mythic+ run, with boss pulls, kills and wipes as markers
+  - `ENCOUNTER_START/END` → a raid, dungeon or delve boss pull (kill or wipe)
+  - `ARENA_MATCH_START/END` → an arena match (win or loss)
+  - `UNIT_DIED` → death markers for you and your group (Feign Death is ignored)
+- **Trimming.** Footage is recorded continuously and matched to events by timestamp, so the
+  combat log's write delay never costs you the start of a pull. Footage outside any activity
+  is deleted after 24 hours (configurable); activities are kept for 30 days, favorites forever.
+- **Playback.** Segments are stitched into a single seamless timeline on the fly, with
+  markers on the scrub bar, a marker list, 0.25×–2× speed, frame stepping and passthrough
+  MP4 export.
+
+## Requirements
+
+- macOS 15 or later, Apple Silicon recommended
+- Xcode 16 or later to build
+
+## Build and run
+
+```sh
+scripts/build.sh --install          # builds Release, copies to /Applications
+open /Applications/WoW\ Session\ Recorder.app
+```
+
+Or open `SessionRecorder.xcodeproj` in Xcode and run the **SessionRecorder** scheme.
+
+On first launch:
+
+1. **Grant Screen Recording permission** when macOS asks (System Settings → Privacy &
+   Security → Screen & System Audio Recording), then relaunch the app.
+2. **Install the helper addon** from Settings → World of Warcraft (see below), or type
+   `/combatlog` in game each session.
+
+> Ad-hoc builds get a new code signature each time, so macOS asks for Screen Recording
+> permission again after every rebuild. Build with `SIGN_IDENTITY="Apple Development"` to
+> keep the permission across builds.
+
+## The helper addon
+
+WoW turns combat logging off at every logout, and without the log there's nothing to label.
+`addon/SessionRecorderHelper` is a tiny addon that:
+
+- turns combat logging on when you enter a dungeon, raid, delve, arena or battleground, and
+  back off when you leave (only if it turned it on itself)
+- enables Advanced Combat Logging if it's off
+
+The app can install it for you with one click. In game, `/srh` shows its status;
+`/srh always` and `/srh off` change its mode.
+
+## Only recording in instances
+
+Settings → Recording → **Record: Only in instances** records only in dungeons, raids and
+delves, including Mythic+. Recording starts when you zone in and keeps going for 2 minutes
+after you leave; a key in progress keeps recording even if you step outside. This skips
+town, queues and character select, roughly 6 GB per hour of footage that would otherwise
+be deleted.
+
+- It reads your location from the combat log, so it needs the helper addon (or
+  `/combatlog`). Without a log it falls back to recording everything and says so.
+- Battlegrounds and other PvP aren't detected.
+- In the open world, ⌃⌥B starts a 1-minute recording from the moment you press it (there's
+  no earlier footage to save), and ⌃⌥C records until you press it again.
+
+## Opening with WoW
+
+Settings → World of Warcraft → **Open WoW Session Recorder** has three choices:
+
+- **When WoW launches.** Nothing runs while you're not playing. A launchd agent
+  (`~/Library/LaunchAgents/io.github.wowsessionrecorder.open-with-wow.plist`) watches files
+  WoW rewrites at startup in `_retail_/Logs` and opens the recorder. The recorder quits
+  itself when WoW quits, unless the library window is open.
+- **At login.** Stays in the menu bar.
+- **Manually.**
+
+**Also open with WoW** opens any other apps you play with in the
+background when WoW starts. If you choose, it quits them 30 seconds after WoW quits,
+giving them time to sync.
+
+## Using it
+
+| Action | How |
+| --- | --- |
+| Bookmark a moment | **⌃⌥B**. Adds a marker to the current activity, or saves a 40-second clip if nothing is in progress |
+| Start or stop a manual clip | **⌃⌥C** |
+| Pause recording | Menu bar → Pause Recording |
+| Review | Menu bar → Open Library… |
+
+In the player: **K** plays or pauses, **[** and **]** jump between markers, and the arrow
+keys step frames.
+
+Footage lives in `~/Movies/WoW Session Recorder` by default and can be moved in Settings.
+Expect roughly 6–9 GB per hour at 1440p60 before trimming.
+
+## Project layout
+
+```
+Packages/RecorderCore/     Pure Swift logic, unit-tested with `swift test`
+  CombatLogParser.swift      log line and timestamp parsing
+  ActivityTracker.swift      events → activities state machine
+  Segments.swift             segment naming, index, sessions
+  PlaybackTimeline.swift     wall-clock ↔ playback time across segment gaps
+  Retention.swift            what to delete and when
+SessionRecorder/           The app
+  Capture/                   ScreenCaptureKit stream and HEVC segment writer
+  CombatLog/                 log file tailer
+  System/                    WoW detection, global hotkeys, addon installer
+  Views/                     menu bar, library, player, settings
+addon/SessionRecorderHelper/ The WoW addon (bundled into the app at build time)
+scripts/make-icon.swift      Draws the app icon; rerun after editing it
+```
+
+Run the core tests with:
+
+```sh
+cd Packages/RecorderCore && swift test
+# Optionally smoke-test against a real log:
+COMBAT_LOG_PATH=/path/to/WoWCombatLog-....txt swift test --filter parsesRealLog
+```
+
+## Troubleshooting
+
+The app logs to the unified log. In zsh, `log` is a shell built-in, so use the full path:
+
+```sh
+/usr/bin/log stream --predicate 'subsystem == "SessionRecorder"' --level info
+```
+
+Each finished segment logs how many frames WoW delivered and how many the encoder dropped.
+Drops should be 0. A low frame rate with no drops means WoW itself was rendering slowly
+(e.g. its background frame cap while unfocused).
+
+## Known limitations
+
+- Footage from the last minute isn't playable until its segment finishes.
+- If the app starts mid-key, that key isn't detected, because the log is read from the end
+  on launch.
+- Microphone and voice chat aren't recorded.
+- Hotkeys are fixed.
