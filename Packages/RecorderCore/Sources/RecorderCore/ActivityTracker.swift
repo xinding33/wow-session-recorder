@@ -38,6 +38,16 @@ public struct ActivityTracker: Sendable {
     private var keyInstanceID: Int?
     private var arenaTeamID: Int?
 
+    /// The logging player, learned from their own casts.
+    public private(set) var playerGUID: String?
+    private var playerName: String?
+    /// Specs logged for the current activity's group (`COMBATANT_INFO` follows every start).
+    private var combatants: [String: Int] = [:]
+    /// Hostile NPCs seen during the open encounter: max health and the lowest % they reached.
+    private var encounterUnits: [String: (maxHP: Int, lowestPercent: Double)] = [:]
+    /// Position of the line being handled, for activities' log ranges.
+    private var position: LogPosition?
+
     public init(options: Options = Options()) {
         self.options = options
     }
@@ -69,6 +79,59 @@ public struct ActivityTracker: Sendable {
     // MARK: - Combat log
 
     public mutating func handle(_ entry: CombatLogEntry) -> [Activity] {
+        switch entry.event {
+        case let .ownCast(guid, name):
+            guard guid != playerGUID else { return [] }
+            playerGUID = guid
+            playerName = Self.shortName(name)
+            return refreshDetails()
+        case let .combatantInfo(guid, specID):
+            combatants[guid] = specID
+            return refreshDetails()
+        case let .hostileHealth(guid, current, max):
+            guard currentEncounterID != nil else { return [] }
+            let percent = Double(current) / Double(max) * 100
+            let lowest = min(percent, encounterUnits[guid]?.lowestPercent ?? 100)
+            encounterUnits[guid] = (Swift.max(max, encounterUnits[guid]?.maxHP ?? 0), lowest)
+            return []
+        default:
+            break
+        }
+
+        position = entry.position
+        let previousID = current?.id
+        var changed = handleActivityEvent(entry)
+        if var open = current, open.id != previousID {
+            // A new activity just started; the group's loadouts follow in the next lines.
+            combatants = [:]
+            if let position {
+                open.log = LogRange(fileName: position.fileName, startOffset: position.offset)
+            }
+            current = open
+            if let index = changed.lastIndex(where: { $0.id == open.id }) { changed[index] = open }
+            changed += refreshDetails()
+        }
+        return changed
+    }
+
+    /// Fills in the player's character, spec and group from what's been logged so far.
+    private mutating func refreshDetails() -> [Activity] {
+        guard var open = current else { return [] }
+        let before = open
+        if let playerName { open.character = playerName }
+        if let playerGUID, let spec = combatants[playerGUID] { open.specID = spec }
+        if !combatants.isEmpty { open.groupSpecIDs = combatants.values.sorted() }
+        guard open != before else { return [] }
+        current = open
+        return [open]
+    }
+
+    /// Lowest health % of the boss, taken as the hostile NPC with the most max health.
+    private var bossHealthPercent: Double? {
+        encounterUnits.values.max { $0.maxHP < $1.maxHP }?.lowestPercent
+    }
+
+    private mutating func handleActivityEvent(_ entry: CombatLogEntry) -> [Activity] {
         var changed: [Activity] = []
         let date = entry.date
 
@@ -77,7 +140,7 @@ public struct ActivityTracker: Sendable {
         }
 
         switch entry.event {
-        case .logVersion:
+        case .logVersion, .ownCast, .combatantInfo, .hostileHealth:
             break
 
         case let .zoneChange(instanceID, name, difficultyID):
@@ -115,6 +178,7 @@ public struct ActivityTracker: Sendable {
             }
 
         case let .encounterStart(encounterID, name, difficultyID, _, _):
+            encounterUnits = [:]
             if var run = current, currentIsRun {
                 run.markers.append(Marker(date: date, kind: .bossPull, label: "Pull: \(name)"))
                 current = run
@@ -125,22 +189,27 @@ public struct ActivityTracker: Sendable {
                 let subtitle = [zone?.name, Difficulty.name(for: difficultyID)]
                     .compactMap { $0 }
                     .joined(separator: " · ")
-                let activity = Activity(
+                var activity = Activity(
                     kind: Difficulty.activityKind(for: difficultyID),
                     title: name,
                     subtitle: subtitle,
                     start: date,
                     markers: [Marker(date: date, kind: .bossPull, label: "Pull: \(name)")]
                 )
+                activity.encounterID = encounterID
+                activity.difficultyID = difficultyID
                 current = activity
                 currentEncounterID = encounterID
                 changed.append(activity)
             }
 
         case let .encounterEnd(encounterID, name, _, _, success, _):
+            defer { encounterUnits = [:] }
             guard var open = current else { break }
+            let health = success ? nil : bossHealthPercent
+            let wipeLabel = health.map { "Wipe: \(name) (\(Int($0.rounded()))%)" } ?? "Wipe: \(name)"
             let marker = Marker(date: date, kind: success ? .bossKill : .bossWipe,
-                                label: success ? "Kill: \(name)" : "Wipe: \(name)")
+                                label: success ? "Kill: \(name)" : wipeLabel)
             if currentIsRun {
                 open.markers.append(marker)
                 current = open
@@ -149,14 +218,19 @@ public struct ActivityTracker: Sendable {
                 changed.append(open)
             } else if currentEncounterID == encounterID {
                 open.markers.append(marker)
+                open.bossHealthPercent = health
                 current = open
                 changed += finishCurrent(at: date, result: success ? .kill : .wipe)
             }
 
-        case let .challengeModeStart(zoneName, instanceID, _, keystoneLevel):
+        case let .challengeModeStart(zoneName, instanceID, challengeModeID, keystoneLevel, affixIDs):
             changed += finishCurrent(at: date, result: .abandoned)
-            current = Activity(kind: .mythicPlus, title: "\(zoneName) +\(keystoneLevel)",
+            var key = Activity(kind: .mythicPlus, title: "\(zoneName) +\(keystoneLevel)",
                                subtitle: "Mythic+", start: date)
+            key.challengeModeID = challengeModeID
+            key.keystoneLevel = keystoneLevel
+            key.affixIDs = affixIDs
+            current = key
             currentIsRun = true
             keyInstanceID = instanceID
             changed.append(current!)
@@ -166,6 +240,7 @@ public struct ActivityTracker: Sendable {
             guard var key = current, key.kind == .mythicPlus else { break }
             if success, durationMs > 0 {
                 key.subtitle = "Mythic+ · \(Self.formatDuration(Double(durationMs) / 1000))"
+                key.keyTimeMs = durationMs
             }
             current = key
             changed += finishCurrent(at: date, result: success ? .completed : .abandoned)
@@ -182,9 +257,9 @@ public struct ActivityTracker: Sendable {
             let result: ActivityResult = arenaTeamID.map { $0 == winningTeam ? .win : .loss } ?? .unknown
             changed += finishCurrent(at: date, result: result)
 
-        case let .playerDied(_, name, isMine):
+        case let .playerDied(guid, name, isMine):
             let marker = Marker(date: date, kind: isMine ? .playerDeath : .death,
-                                label: isMine ? "You died" : "\(Self.shortName(name)) died")
+                                label: isMine ? "You died" : "\(Self.shortName(name)) died", unitGUID: guid)
             if var open = current {
                 open.markers.append(marker)
                 current = open
@@ -276,6 +351,9 @@ public struct ActivityTracker: Sendable {
         guard var open = current else { return [] }
         open.end = max(date, open.start)
         open.result = result
+        if let position, open.log?.fileName == position.fileName {
+            open.log?.endOffset = position.offset
+        }
         if open.kind == .delve, currentIsRun, result == .completed {
             open.subtitle = "Delve · \(Self.formatDuration(open.end!.timeIntervalSince(open.start)))"
         }

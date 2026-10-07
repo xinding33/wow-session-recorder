@@ -20,6 +20,10 @@ Created in [T3 Code](https://t3.codes).
   - `ENCOUNTER_START/END` → a raid or dungeon boss pull (kill or wipe)
   - `ARENA_MATCH_START/END` → an arena match (win or loss)
   - `UNIT_DIED` → death markers for you and your group (Feign Death is ignored)
+- **Details.** Each activity also records your character and spec, the group's specs, pull
+  numbers per boss per night, the boss's lowest health on wipes, and for keys the level,
+  affixes and whether it was timed (+1/+2/+3) or depleted. It also remembers where in the
+  combat log the activity lives, for features that re-read it later.
 - **Trimming.** Footage is recorded continuously and matched to events by timestamp, so the
   combat log's write delay never costs you the start of a pull. Footage outside any activity
   is deleted after 24 hours (configurable); activities are kept for 30 days, favorites forever.
@@ -60,6 +64,9 @@ WoW turns combat logging off at every logout, and without the log there's nothin
 - turns combat logging on when you enter a dungeon, raid, delve, arena or battleground, and
   back off when you leave (only if it turned it on itself)
 - enables Advanced Combat Logging if it's off
+- saves Mythic+ timers, affix names and spec names from the game (the combat log only has
+  IDs), so keys show timed/depleted. WoW writes these on logout or `/reload`, so results
+  appear after your first logout with the addon installed
 
 The app can install it for you with one click. In game, `/srh` shows its status;
 `/srh always` and `/srh off` change its mode.

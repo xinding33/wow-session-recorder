@@ -6,21 +6,30 @@ public enum CombatEvent: Sendable, Equatable {
     case zoneChange(instanceID: Int, name: String, difficultyID: Int)
     case encounterStart(encounterID: Int, name: String, difficultyID: Int, groupSize: Int, instanceID: Int)
     case encounterEnd(encounterID: Int, name: String, difficultyID: Int, groupSize: Int, success: Bool, durationMs: Int)
-    case challengeModeStart(zoneName: String, instanceID: Int, challengeModeID: Int, keystoneLevel: Int)
+    case challengeModeStart(zoneName: String, instanceID: Int, challengeModeID: Int, keystoneLevel: Int, affixIDs: [Int])
     case challengeModeEnd(instanceID: Int, success: Bool, keystoneLevel: Int, durationMs: Int)
     case arenaMatchStart(instanceID: Int, matchType: String, teamID: Int)
     case arenaMatchEnd(winningTeam: Int, durationSeconds: Int)
     /// A player (not a pet or NPC) died. `isMine` is true for the logging player.
     case playerDied(guid: String, name: String, isMine: Bool)
+    /// A player's loadout, logged at encounter and key start.
+    case combatantInfo(guid: String, specID: Int)
+    /// The logging player cast something, which identifies who "you" are.
+    case ownCast(guid: String, name: String)
+    /// Health of a hostile NPC, from the advanced-logging fields of its own attacks and casts.
+    case hostileHealth(guid: String, current: Int, max: Int)
 }
 
 public struct CombatLogEntry: Sendable, Equatable {
     public var date: Date
     public var event: CombatEvent
+    /// Where the line is in the log file, when read from one.
+    public var position: LogPosition?
 
-    public init(date: Date, event: CombatEvent) {
+    public init(date: Date, event: CombatEvent, position: LogPosition? = nil) {
         self.date = date
         self.event = event
+        self.position = position
     }
 }
 
@@ -32,11 +41,12 @@ public enum CombatLogParser {
     private static let interestingEvents: Set<Substring> = [
         "COMBAT_LOG_VERSION", "ZONE_CHANGE", "ENCOUNTER_START", "ENCOUNTER_END",
         "CHALLENGE_MODE_START", "CHALLENGE_MODE_END", "ARENA_MATCH_START", "ARENA_MATCH_END",
-        "UNIT_DIED",
+        "UNIT_DIED", "COMBATANT_INFO", "SPELL_CAST_SUCCESS",
+        "SWING_DAMAGE", "SWING_DAMAGE_LANDED", "SPELL_DAMAGE", "RANGE_DAMAGE", "SPELL_PERIODIC_DAMAGE",
     ]
 
     /// Returns `nil` for malformed lines and for events the recorder ignores.
-    public static func parse(line: some StringProtocol) -> CombatLogEntry? {
+    public static func parse(line: some StringProtocol, position: LogPosition? = nil) -> CombatLogEntry? {
         let line = Substring(line)
         guard let separator = line.range(of: "  ") else { return nil }
         let body = line[separator.upperBound...]
@@ -47,7 +57,7 @@ public enum CombatLogParser {
         let fields = splitFields(body)
         guard let event = makeEvent(name: eventName, fields: fields) else { return nil }
         guard let date = CombatTimestamp.parse(line[..<separator.lowerBound]) else { return nil }
-        return CombatLogEntry(date: date, event: event)
+        return CombatLogEntry(date: date, event: event, position: position)
     }
 
     private static func makeEvent(name: Substring, fields f: [Substring]) -> CombatEvent? {
@@ -76,8 +86,10 @@ public enum CombatLogParser {
         case "CHALLENGE_MODE_START":
             // CHALLENGE_MODE_START,"Skyreach",1209,161,11,[162,10,9]
             guard let zone = str(1), let instanceID = int(2) else { return nil }
+            let affixes = f.count > 5 ? f[5].trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+                .split(separator: ",").compactMap { Int($0) } : []
             return .challengeModeStart(zoneName: zone, instanceID: instanceID,
-                                       challengeModeID: int(3) ?? 0, keystoneLevel: int(4) ?? 0)
+                                       challengeModeID: int(3) ?? 0, keystoneLevel: int(4) ?? 0, affixIDs: affixes)
         case "CHALLENGE_MODE_END":
             // CHALLENGE_MODE_END,1209,1,11,1101714,347.908173,3445.950195
             guard let instanceID = int(1) else { return nil }
@@ -100,10 +112,39 @@ public enum CombatLogParser {
             if f.count >= 10, f[9] == "1" { return nil }
             let flags = UInt32(f[7].dropFirst(2), radix: 16) ?? 0
             return .playerDied(guid: String(guid), name: unquote(f[6]), isMine: flags & affiliationMine != 0)
+        case "COMBATANT_INFO":
+            // COMBATANT_INFO,playerGUID,faction,str,agi,sta,int,dodge,parry,block,crit×3,speed,
+            // leech,haste×3,avoidance,mastery,vers×3,armor,currentSpecID,[talents],...
+            guard f.count > 25, f[1].hasPrefix("Player-"), let spec = int(25) else { return nil }
+            return .combatantInfo(guid: String(f[1]), specID: spec)
+        case "SPELL_CAST_SUCCESS" where f.count > 3 && f[1].hasPrefix("Player-") && hasFlag(f[3], affiliationMine):
+            return .ownCast(guid: String(f[1]), name: unquote(f[2]))
         default:
-            return nil
+            return hostileHealth(name: name, fields: f)
         }
     }
+
+    /// Advanced combat logging appends the acting unit's state after the event prefix:
+    /// `infoGUID, ownerGUID, currentHP, maxHP, ...`. For damage and casts the info unit is
+    /// the source, so a boss's own attacks report its health.
+    private static func hostileHealth(name: Substring, fields f: [Substring]) -> CombatEvent? {
+        // Swing events have no spell prefix (id, name, school) before the advanced fields.
+        let advancedStart = name.hasPrefix("SWING") ? 9 : 12
+        guard f.count > advancedStart + 3 else { return nil }
+        let infoGUID = f[advancedStart]
+        guard infoGUID == f[1], infoGUID.hasPrefix("Creature-") || infoGUID.hasPrefix("Vehicle-"),
+              hasFlag(f[3], reactionHostile),
+              let current = Int(f[advancedStart + 2]), let max = Int(f[advancedStart + 3]), max > 0
+        else { return nil }
+        return .hostileHealth(guid: String(infoGUID), current: current, max: max)
+    }
+
+    private static func hasFlag(_ field: Substring, _ flag: UInt32) -> Bool {
+        (UInt32(field.dropFirst(2), radix: 16) ?? 0) & flag != 0
+    }
+
+    /// COMBATLOG_OBJECT_REACTION_HOSTILE
+    private static let reactionHostile: UInt32 = 0x40
 
     /// COMBATLOG_OBJECT_AFFILIATION_MINE
     private static let affiliationMine: UInt32 = 0x1

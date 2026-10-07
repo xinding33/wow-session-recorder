@@ -64,12 +64,40 @@ public struct Marker: Codable, Sendable, Hashable, Identifiable {
     public var date: Date
     public var kind: Kind
     public var label: String
+    /// The unit the marker is about, e.g. who died.
+    public var unitGUID: String?
 
-    public init(id: UUID = UUID(), date: Date, kind: Kind, label: String) {
+    public init(id: UUID = UUID(), date: Date, kind: Kind, label: String, unitGUID: String? = nil) {
         self.id = id
         self.date = date
         self.kind = kind
         self.label = label
+        self.unitGUID = unitGUID
+    }
+}
+
+/// Where an activity's lines live in the combat log, so details can be re-read later.
+public struct LogRange: Codable, Sendable, Hashable {
+    public var fileName: String
+    public var startOffset: UInt64
+    /// `nil` when the activity ended in a different log file (e.g. after a relog).
+    public var endOffset: UInt64?
+
+    public init(fileName: String, startOffset: UInt64, endOffset: UInt64? = nil) {
+        self.fileName = fileName
+        self.startOffset = startOffset
+        self.endOffset = endOffset
+    }
+}
+
+/// A byte position in a combat log file.
+public struct LogPosition: Sendable, Hashable {
+    public var fileName: String
+    public var offset: UInt64
+
+    public init(fileName: String, offset: UInt64) {
+        self.fileName = fileName
+        self.offset = offset
     }
 }
 
@@ -85,6 +113,25 @@ public struct Activity: Codable, Sendable, Hashable, Identifiable {
     public var result: ActivityResult
     public var markers: [Marker]
     public var isFavorite: Bool
+
+    // Details read from the combat log. All optional so older libraries still decode.
+
+    /// The recording player's character name, without realm.
+    public var character: String?
+    /// The recording player's specialization ID.
+    public var specID: Int?
+    /// Specialization IDs of everyone in the group, including the player.
+    public var groupSpecIDs: [Int]?
+    public var encounterID: Int?
+    public var difficultyID: Int?
+    /// Lowest health the boss reached, 0–100, for wipes.
+    public var bossHealthPercent: Double?
+    public var challengeModeID: Int?
+    public var keystoneLevel: Int?
+    public var affixIDs: [Int]?
+    /// The key's official time, including death penalties.
+    public var keyTimeMs: Int?
+    public var log: LogRange?
 
     public init(
         id: UUID = UUID(),

@@ -100,6 +100,19 @@ enum HelperAddon {
         return hasLoaded ? .active : .notLoadedYet
     }
 
+    /// The helper's most recently written SavedVariables file across WoW accounts.
+    static func savedVariablesURL(retail: URL) -> URL? {
+        let accounts = retail.appending(path: "WTF/Account")
+        let files = ((try? FileManager.default.contentsOfDirectory(at: accounts, includingPropertiesForKeys: nil)) ?? [])
+            .map { $0.appending(path: "SavedVariables/\(name).lua") }
+            .compactMap { url -> (URL, Date)? in
+                guard let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+                else { return nil }
+                return (url, modified)
+            }
+        return files.max { $0.1 < $1.1 }?.0
+    }
+
     static func installedVersion(retail: URL) -> String? {
         version(in: WoWInstall.addOnsFolder(in: retail).appending(path: name))
     }

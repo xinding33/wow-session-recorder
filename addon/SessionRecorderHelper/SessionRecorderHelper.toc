@@ -2,7 +2,7 @@
 ## Title: WoW Session Recorder Helper
 ## Notes: Turns on combat logging in instances so WoW Session Recorder can label your recordings.
 ## Author: WoW Session Recorder
-## Version: 1.0.1
+## Version: 1.1.0
 ## SavedVariables: SessionRecorderHelperDB
 
 SessionRecorderHelper.lua

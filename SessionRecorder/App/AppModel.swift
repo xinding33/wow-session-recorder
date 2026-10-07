@@ -44,6 +44,9 @@ final class AppModel {
     private(set) var combatLogLastWrite: Date?
     private(set) var isClipping = false
     private(set) var retailFolder: URL?
+    /// Timers, affix and spec names saved by the helper addon.
+    private(set) var gameData = GameData()
+    private var gameDataSource: (url: URL, modified: Date)?
     /// Set when the launch mode couldn't be applied (e.g. launchd refused the agent).
     private(set) var launchModeError: String?
     /// The library window is open; auto-quit waits until it closes.
@@ -98,6 +101,7 @@ final class AppModel {
         hotkeys.register(.clip) { [weak self] in self?.toggleClip() }
 
         refreshRetailFolder()
+        refreshGameData()
         applyLaunchMode()
         if !settings.autoRecord { captureState = .disabled }
         capture.onUnexpectedStop = { [weak self] error in
@@ -110,6 +114,7 @@ final class AppModel {
             Task { @MainActor in
                 self?.checkCaptureTarget()
                 self?.evaluateRecording()
+                self?.refreshGameData()
             }
         }
         runRetention()
@@ -347,6 +352,19 @@ final class AppModel {
     }
 
     // MARK: - Combat log
+
+    /// Re-reads the helper addon's SavedVariables when WoW has rewritten them (on logout/reload).
+    func refreshGameData() {
+        guard let retailFolder, let url = HelperAddon.savedVariablesURL(retail: retailFolder),
+              let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
+              gameDataSource?.url != url || gameDataSource?.modified != modified,
+              let text = try? String(contentsOf: url, encoding: .utf8)
+        else { return }
+        gameDataSource = (url, modified)
+        if let db = LuaSavedVariables.parse(text)["SessionRecorderHelperDB"] {
+            gameData = GameData(savedVariables: db)
+        }
+    }
 
     func refreshRetailFolder() {
         let folder = settings.wowRetailPath.flatMap { WoWInstall.normalize(URL(fileURLWithPath: $0)) }

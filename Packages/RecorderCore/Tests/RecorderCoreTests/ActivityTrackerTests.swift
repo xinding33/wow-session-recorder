@@ -114,7 +114,7 @@ struct ActivityTrackerTests {
         var tracker = ActivityTracker()
         let t0 = Date(timeIntervalSince1970: 1_000_000)
         _ = tracker.handle(.init(date: t0, event: .zoneChange(instanceID: 5, name: "Skyreach", difficultyID: 8)))
-        _ = tracker.handle(.init(date: t0, event: .challengeModeStart(zoneName: "Skyreach", instanceID: 5, challengeModeID: 1, keystoneLevel: 12)))
+        _ = tracker.handle(.init(date: t0, event: .challengeModeStart(zoneName: "Skyreach", instanceID: 5, challengeModeID: 1, keystoneLevel: 12, affixIDs: [])))
         let changed = tracker.handle(.init(date: t0 + 60, event: .zoneChange(instanceID: 0, name: "Outside", difficultyID: 0)))
 
         #expect(changed.isEmpty)
@@ -127,7 +127,7 @@ struct ActivityTrackerTests {
         _ = tracker.handle(.init(date: t0, event: .encounterStart(encounterID: 9, name: "Boss", difficultyID: 16, groupSize: 20, instanceID: 1)))
         #expect(tracker.logFileChanged(at: t0 + 10).first?.result == .unknown)
 
-        _ = tracker.handle(.init(date: t0 + 20, event: .challengeModeStart(zoneName: "Skyreach", instanceID: 5, challengeModeID: 1, keystoneLevel: 12)))
+        _ = tracker.handle(.init(date: t0 + 20, event: .challengeModeStart(zoneName: "Skyreach", instanceID: 5, challengeModeID: 1, keystoneLevel: 12, affixIDs: [])))
         #expect(tracker.logFileChanged(at: t0 + 30).isEmpty)
         #expect(tracker.current?.kind == .mythicPlus)
     }
@@ -154,7 +154,7 @@ struct ActivityTrackerTests {
         var tracker = ActivityTracker()
         let t0 = Date(timeIntervalSince1970: 1_000_000)
         _ = tracker.handle(.init(date: t0, event: .zoneChange(instanceID: 5, name: "Skyreach", difficultyID: 8)))
-        _ = tracker.handle(.init(date: t0, event: .challengeModeStart(zoneName: "Skyreach", instanceID: 5, challengeModeID: 1, keystoneLevel: 12)))
+        _ = tracker.handle(.init(date: t0, event: .challengeModeStart(zoneName: "Skyreach", instanceID: 5, challengeModeID: 1, keystoneLevel: 12, affixIDs: [])))
         _ = tracker.handle(.init(date: t0 + 60, event: .zoneChange(instanceID: 0, name: "Outside", difficultyID: 0)))
         #expect(!tracker.isInInstance)
         #expect(tracker.wantsRecording)

@@ -38,7 +38,7 @@ struct CombatLogParserTests {
 
     @Test func parsesChallengeModeEvents() throws {
         let start = try #require(CombatLogParser.parse(line: #"5/20/2026 20:45:01.993-7  CHALLENGE_MODE_START,"Skyreach",1209,161,11,[162,10,9]"#))
-        #expect(start.event == .challengeModeStart(zoneName: "Skyreach", instanceID: 1209, challengeModeID: 161, keystoneLevel: 11))
+        #expect(start.event == .challengeModeStart(zoneName: "Skyreach", instanceID: 1209, challengeModeID: 161, keystoneLevel: 11, affixIDs: [162, 10, 9]))
 
         let end = try #require(CombatLogParser.parse(line: "5/20/2026 21:03:11.793-7  CHALLENGE_MODE_END,1209,1,11,1101714,347.908173,3445.950195"))
         #expect(end.event == .challengeModeEnd(instanceID: 1209, success: true, keystoneLevel: 11, durationMs: 1101714))
@@ -88,15 +88,17 @@ struct CombatLogParserTests {
         var parsed = 0
         // Read in chunks like the live tailer does, so lines straddle chunk boundaries.
         while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty {
-            for line in buffer.append(chunk) {
-                guard let entry = CombatLogParser.parse(line: line) else { continue }
+            for (line, offset) in buffer.appendWithOffsets(chunk) {
+                guard let entry = CombatLogParser.parse(line: line, position: LogPosition(fileName: "log", offset: offset)) else { continue }
                 parsed += 1
                 library.upsert(tracker.handle(entry))
             }
         }
         print("Parsed \(parsed) interesting events into \(library.activities.count) activities:")
         for a in library.activities {
-            print("  \(a.kind.displayName): \(a.title) [\(a.subtitle)] \(a.result.displayName) \(ActivityTracker.formatDuration(a.duration())) markers=\(a.markers.count)")
+            let spec = a.specID.flatMap { GameData().spec($0)?.displayName } ?? "?"
+            let health = a.bossHealthPercent.map { String(format: " boss %.0f%%", $0) } ?? ""
+            print("  \(a.kind.displayName): \(a.title) [\(a.subtitle)] \(a.result.displayName)\(health) \(ActivityTracker.formatDuration(a.duration())) markers=\(a.markers.count) | \(a.character ?? "?") \(spec) group=\(a.groupSpecIDs ?? []) key=\(a.keystoneLevel.map(String.init) ?? "-") affixes=\(a.affixIDs ?? []) log=\(a.log.map { "\($0.startOffset)-\($0.endOffset.map(String.init) ?? "?")" } ?? "-")")
         }
         #expect(parsed > 0)
     }

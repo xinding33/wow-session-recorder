@@ -147,11 +147,14 @@ private struct ActivityList: View {
                 description: Text("Boss pulls, keys and arena matches show up here automatically while combat logging is on. Press \(Hotkey.bookmark.display) to bookmark a moment.")
             )
         } else {
+            // Numbered across the whole library so filtering doesn't renumber pulls.
+            let pullNumbers = ActivityPresentation.pullNumbers(model.activities)
             List(selection: $selection) {
                 ForEach(groupedByDay, id: \.day) { group in
                     Section(group.day.formatted(date: .complete, time: .omitted)) {
                         ForEach(group.activities) { activity in
-                            ActivityRow(activity: activity)
+                            ActivityRow(activity: activity, gameData: model.gameData,
+                                        pullNumber: pullNumbers[activity.id])
                                 .tag(activity.id)
                                 .contextMenu {
                                     Button(activity.isFavorite ? "Unfavorite" : "Favorite") { model.toggleFavorite(activity) }
@@ -178,6 +181,8 @@ private struct ActivityList: View {
 
 private struct ActivityRow: View {
     let activity: Activity
+    let gameData: GameData
+    let pullNumber: Int?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -192,14 +197,14 @@ private struct ActivityRow: View {
                         Image(systemName: "star.fill").font(.caption).foregroundStyle(.yellow)
                     }
                 }
-                Text(activity.subtitle.isEmpty ? activity.kind.displayName : activity.subtitle)
+                Text(ActivityPresentation.caption(for: activity, gameData: gameData, pullNumber: pullNumber))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                ResultBadge(result: activity.result)
+                ResultBadge(badge: ActivityPresentation.badge(for: activity, gameData: gameData))
                 Text("\(activity.start.formatted(date: .omitted, time: .shortened)) · \(formatTime(activity.duration()))")
                     .font(.caption)
                     .monospacedDigit()
@@ -207,14 +212,15 @@ private struct ActivityRow: View {
             }
         }
         .padding(.vertical, 2)
+        .help(ActivityPresentation.tooltip(for: activity, gameData: gameData))
     }
 }
 
 private struct ResultBadge: View {
-    let result: ActivityResult
+    let badge: ActivityPresentation.Badge
 
     var body: some View {
-        Text(result.displayName)
+        Text(badge.text)
             .font(.caption2.weight(.semibold))
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
@@ -223,12 +229,12 @@ private struct ResultBadge: View {
     }
 
     private var color: Color {
-        switch result {
-        case .kill, .completed, .win: .green
-        case .wipe, .loss: .red
-        case .abandoned: .orange
-        case .inProgress: .blue
-        case .unknown: .secondary
+        switch badge.tone {
+        case .positive: .green
+        case .negative: .red
+        case .warning: .orange
+        case .active: .blue
+        case .neutral: .secondary
         }
     }
 }

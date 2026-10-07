@@ -4,6 +4,9 @@
 -- boss pulls, keys, arena matches and deaths. WoW turns combat logging off on every logout,
 -- so this addon turns it back on whenever you enter an instance.
 --
+-- It also saves Mythic+ timers, affix names and spec names (the combat log only has IDs) so
+-- the app can show timed/depleted results. WoW writes this to SavedVariables on logout/reload.
+--
 -- /srh             show status
 -- /srh instances   log only inside dungeons, raids, delves and PvP (default)
 -- /srh always      log everywhere
@@ -54,11 +57,48 @@ local function ensureAdvancedLogging()
     end
 end
 
+-- Merged into what's already saved, so earlier seasons' timers stay available.
+local function collectGameData()
+    local data = SessionRecorderHelperDB.gameData or {}
+    data.keystones = data.keystones or {}
+    data.affixes = data.affixes or {}
+    data.specs = data.specs or {}
+
+    if C_ChallengeMode and C_ChallengeMode.GetMapTable then
+        for _, mapID in ipairs(C_ChallengeMode.GetMapTable() or {}) do
+            local name, _, timeLimit = C_ChallengeMode.GetMapUIInfo(mapID)
+            if name and timeLimit and timeLimit > 0 then
+                data.keystones[mapID] = { name = name, timeLimit = timeLimit }
+            end
+        end
+    end
+    if C_ChallengeMode and C_ChallengeMode.GetAffixInfo then
+        for affixID = 1, 400 do
+            local name = C_ChallengeMode.GetAffixInfo(affixID)
+            if name then data.affixes[affixID] = name end
+        end
+    end
+    for classID = 1, GetNumClasses() do
+        local className = GetClassInfo(classID)
+        if className then
+            for index = 1, GetNumSpecializationsForClassID(classID) do
+                local specID, specName = GetSpecializationInfoForClassID(classID, index)
+                if specID and specName then
+                    data.specs[specID] = { spec = specName, class = className }
+                end
+            end
+        end
+    end
+
+    SessionRecorderHelperDB.gameData = data
+end
+
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 frame:RegisterEvent("CHALLENGE_MODE_START")
+frame:RegisterEvent("CHALLENGE_MODE_MAPS_UPDATE")
 frame:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
         if arg1 ~= "SessionRecorderHelper" then return end
@@ -68,8 +108,14 @@ frame:SetScript("OnEvent", function(_, event, arg1)
         end
         return
     end
+    if event == "CHALLENGE_MODE_MAPS_UPDATE" then
+        pcall(collectGameData)
+        return
+    end
     if event == "PLAYER_ENTERING_WORLD" then
         ensureAdvancedLogging()
+        pcall(collectGameData)
+        if C_MythicPlus and C_MythicPlus.RequestMapInfo then pcall(C_MythicPlus.RequestMapInfo) end
     end
     -- Instance info can lag the zone event slightly.
     C_Timer.After(1, update)

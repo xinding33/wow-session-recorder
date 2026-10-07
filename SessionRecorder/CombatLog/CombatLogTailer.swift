@@ -54,10 +54,10 @@ final class CombatLogTailer: @unchecked Sendable {
         if url != currentFile {
             let isFirstFile = currentFile == nil
             currentFile = url
-            buffer.reset()
             // On launch, skip history: there's no footage for it. A file that appears while
             // we're running is brand new, so read it from the top.
             offset = isFirstFile ? size : 0
+            buffer.reset(startOffset: offset)
             if isFirstFile, Date().timeIntervalSince(modified) < 10 * 60, let zone = lastZoneChange(in: url, size: size) {
                 onSeedZone(zone)
             }
@@ -69,7 +69,7 @@ final class CombatLogTailer: @unchecked Sendable {
 
         if size < offset {
             offset = 0
-            buffer.reset()
+            buffer.reset(startOffset: 0)
         }
         guard size > offset else { return }
         onWrite(modified)
@@ -81,7 +81,10 @@ final class CombatLogTailer: @unchecked Sendable {
             let count = Int(min(size - offset, UInt64(maxReadPerPoll)))
             guard let data = try handle.read(upToCount: count), !data.isEmpty else { return }
             offset += UInt64(data.count)
-            let entries = buffer.append(data).compactMap { CombatLogParser.parse(line: $0) }
+            let fileName = url.lastPathComponent
+            let entries = buffer.appendWithOffsets(data).compactMap { line, lineOffset in
+                CombatLogParser.parse(line: line, position: LogPosition(fileName: fileName, offset: lineOffset))
+            }
             if !entries.isEmpty {
                 onEntries(entries)
             }
