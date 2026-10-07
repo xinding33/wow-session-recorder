@@ -27,7 +27,7 @@ private struct RecordingSettings: View {
                     ForEach(RecordingScope.allCases) { Text($0.displayName).tag($0) }
                 }
                 if model.isRecordingEverythingAsFallback {
-                    Label("Combat logging isn't on, so the app can't tell where you are and records everything. Install the helper addon (World of Warcraft tab).",
+                    Label("\(model.fallbackReason), so the app can't tell where you are and records everything. Check the helper addon on the World of Warcraft tab.",
                           systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
                 }
@@ -195,6 +195,19 @@ private struct GameSettings: View {
                     } else {
                         Button("Install") { installAddon() }
                             .disabled(model.retailFolder == nil)
+                    }
+                }
+                if installedAddonVersion != nil {
+                    switch model.helperAddonStatus {
+                    case .disabled:
+                        Label("Turned off in WoW's addon list. Enable \"WoW Session Recorder Helper\" at character select.",
+                              systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                    case .notLoadedYet:
+                        Text("Log in to a character (or /reload) to activate it.")
+                            .foregroundStyle(.secondary)
+                    case .active, .notInstalled:
+                        EmptyView()
                     }
                 }
                 if let addonError {

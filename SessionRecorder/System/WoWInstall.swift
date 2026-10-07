@@ -57,6 +57,49 @@ enum HelperAddon {
         bundledURL.flatMap(version(in:))
     }
 
+    enum Status: Equatable {
+        case notInstalled
+        /// Installed, but WoW hasn't loaded it yet (log in once to activate it).
+        case notLoadedYet
+        /// Turned off in WoW's addon list.
+        case disabled
+        case active
+    }
+
+    /// Whether the helper is installed and actually running in game.
+    ///
+    /// WoW writes `SavedVariables/SessionRecorderHelper.lua` once the addon has loaded, and
+    /// records addons turned off in a character's `AddOns.txt` (only rewritten when that list
+    /// changes, so the newest one reflects the most recent change).
+    static func status(retail: URL) -> Status {
+        guard installedVersion(retail: retail) != nil else { return .notInstalled }
+        let accounts = retail.appending(path: "WTF/Account")
+        let fm = FileManager.default
+        var newestAddOnsList: (url: URL, modified: Date)?
+        var hasLoaded = false
+        for account in (try? fm.contentsOfDirectory(at: accounts, includingPropertiesForKeys: nil)) ?? [] {
+            if fm.fileExists(atPath: account.appending(path: "SavedVariables/\(name).lua").path) {
+                hasLoaded = true
+            }
+            for realm in (try? fm.contentsOfDirectory(at: account, includingPropertiesForKeys: nil)) ?? [] {
+                for character in (try? fm.contentsOfDirectory(at: realm, includingPropertiesForKeys: nil)) ?? [] {
+                    let list = character.appending(path: "AddOns.txt")
+                    guard let modified = try? list.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+                    else { continue }
+                    if modified > newestAddOnsList?.modified ?? .distantPast {
+                        newestAddOnsList = (list, modified)
+                    }
+                }
+            }
+        }
+        if let list = newestAddOnsList?.url,
+           let text = try? String(contentsOf: list, encoding: .utf8),
+           text.split(whereSeparator: \.isNewline).contains(where: { $0.hasPrefix("\(name): disabled") }) {
+            return .disabled
+        }
+        return hasLoaded ? .active : .notLoadedYet
+    }
+
     static func installedVersion(retail: URL) -> String? {
         version(in: WoWInstall.addOnsFolder(in: retail).appending(path: name))
     }

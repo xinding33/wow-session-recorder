@@ -42,7 +42,7 @@ struct MenuBarContent: View {
     var body: some View {
         Text(model.captureState.statusText)
         if model.isRecordingEverythingAsFallback {
-            Text("Combat log off: recording everything")
+            Text("\(model.fallbackReason): recording everything")
         }
         if let last = model.combatLogLastWrite {
             Text("Combat log updated \(last, style: .relative) ago")

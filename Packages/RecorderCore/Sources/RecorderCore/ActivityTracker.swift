@@ -29,6 +29,11 @@ public struct ActivityTracker: Sendable {
     private var lastBookmarkClip: Activity?
 
     private var zone: (instanceID: Int, name: String, difficultyID: Int)?
+    /// The open activity spans a whole run (a key or a delve), so bosses inside it are markers
+    /// rather than activities of their own.
+    private var currentIsRun = false
+    /// A boss died during the open delve run.
+    private var runBossKilled = false
     private var currentEncounterID: Int?
     private var keyInstanceID: Int?
     private var arenaTeamID: Int?
@@ -40,8 +45,11 @@ public struct ActivityTracker: Sendable {
     // MARK: - Where the player is
 
     /// Inside a dungeon, raid or delve, going by the last zone change in the log.
+    ///
+    /// Instance ID 0 is the open world. WoW sometimes carries the previous difficulty over when
+    /// you leave (`ZONE_CHANGE,0,"Silvermoon City",23`), so the difficulty alone isn't enough.
     public var isInInstance: Bool {
-        zone.map { Difficulty.isInstance($0.difficultyID) } ?? false
+        zone.map { $0.instanceID != 0 && Difficulty.isInstance($0.difficultyID) } ?? false
     }
 
     /// Whether footage is needed right now: in an instance, or something is in progress
@@ -74,24 +82,44 @@ public struct ActivityTracker: Sendable {
 
         case let .zoneChange(instanceID, name, difficultyID):
             defer { zone = (instanceID, name, difficultyID) }
-            guard let open = current, instanceID != zone?.instanceID else { break }
-            switch open.kind {
-            case .mythicPlus:
-                // Leaving to the open world mid-key is normal (e.g. repairing); entering a
-                // different instance is not.
-                if difficultyID != 0, instanceID != keyInstanceID {
-                    changed += finishCurrent(at: date, result: .abandoned)
+            let isNewInstance = instanceID != zone?.instanceID
+
+            // WoW sometimes names the zone "UNKNOWN AREA" first, then logs the real name.
+            if !isNewInstance, var run = current, currentIsRun, run.kind == .delve, run.title != name {
+                run.title = name
+                current = run
+                changed.append(run)
+            }
+
+            if let open = current, isNewInstance {
+                switch open.kind {
+                case .mythicPlus:
+                    // Leaving to the open world mid-key is normal (e.g. repairing); entering a
+                    // different instance is not.
+                    if instanceID != 0, instanceID != keyInstanceID {
+                        changed += finishCurrent(at: date, result: .abandoned)
+                    }
+                case .delve where currentIsRun:
+                    changed += finishCurrent(at: date, result: runBossKilled ? .completed : .abandoned)
+                default:
+                    changed += finishCurrent(at: date, result: .unknown)
                 }
-            default:
-                changed += finishCurrent(at: date, result: .unknown)
+            }
+
+            // A delve is recorded as one run from entering to leaving, like a key.
+            if isNewInstance, instanceID != 0, Difficulty.delve.contains(difficultyID), current == nil {
+                let run = Activity(kind: .delve, title: name, subtitle: "Delve", start: date)
+                current = run
+                currentIsRun = true
+                changed.append(run)
             }
 
         case let .encounterStart(encounterID, name, difficultyID, _, _):
-            if var key = current, key.kind == .mythicPlus {
-                key.markers.append(Marker(date: date, kind: .bossPull, label: "Pull: \(name)"))
-                current = key
+            if var run = current, currentIsRun {
+                run.markers.append(Marker(date: date, kind: .bossPull, label: "Pull: \(name)"))
+                current = run
                 currentEncounterID = encounterID
-                changed.append(key)
+                changed.append(run)
             } else {
                 changed += finishCurrent(at: date, result: .unknown)
                 let subtitle = [zone?.name, Difficulty.name(for: difficultyID)]
@@ -113,10 +141,11 @@ public struct ActivityTracker: Sendable {
             guard var open = current else { break }
             let marker = Marker(date: date, kind: success ? .bossKill : .bossWipe,
                                 label: success ? "Kill: \(name)" : "Wipe: \(name)")
-            if open.kind == .mythicPlus {
+            if currentIsRun {
                 open.markers.append(marker)
                 current = open
                 currentEncounterID = nil
+                if success { runBossKilled = true }
                 changed.append(open)
             } else if currentEncounterID == encounterID {
                 open.markers.append(marker)
@@ -128,6 +157,7 @@ public struct ActivityTracker: Sendable {
             changed += finishCurrent(at: date, result: .abandoned)
             current = Activity(kind: .mythicPlus, title: "\(zoneName) +\(keystoneLevel)",
                                subtitle: "Mythic+", start: date)
+            currentIsRun = true
             keyInstanceID = instanceID
             changed.append(current!)
 
@@ -223,10 +253,10 @@ public struct ActivityTracker: Sendable {
     }
 
     /// WoW starts a new log file whenever logging is re-enabled (relog, disconnect, `/combatlog`).
-    /// An open encounter can't be resolved across files, but a key can: its end event will
-    /// arrive in the new file.
+    /// An open encounter can't be resolved across files, but a run (key or delve) can: its end
+    /// arrives in the new file.
     public mutating func logFileChanged(at date: Date) -> [Activity] {
-        guard let open = current, open.kind != .mythicPlus else { return [] }
+        guard current != nil, !currentIsRun else { return [] }
         return finishCurrent(at: date, result: .unknown)
     }
 
@@ -246,7 +276,12 @@ public struct ActivityTracker: Sendable {
         guard var open = current else { return [] }
         open.end = max(date, open.start)
         open.result = result
+        if open.kind == .delve, currentIsRun, result == .completed {
+            open.subtitle = "Delve · \(Self.formatDuration(open.end!.timeIntervalSince(open.start)))"
+        }
         current = nil
+        currentIsRun = false
+        runBossKilled = false
         currentEncounterID = nil
         keyInstanceID = nil
         arenaTeamID = nil

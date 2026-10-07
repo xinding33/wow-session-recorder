@@ -29,6 +29,58 @@ struct ActivityTrackerTests {
         #expect(tracker.current == nil)
     }
 
+    @Test func delveBecomesOneRunWithBossAsMarker() throws {
+        var tracker = ActivityTracker()
+        let library = try replay("delve", into: &tracker)
+
+        #expect(library.activities.count == 1)
+        let run = try #require(library.activities.first)
+        #expect(run.kind == .delve)
+        #expect(run.title == "The Darkway")
+        #expect(run.result == .completed)
+        #expect(run.subtitle == "Delve · 10:28")
+        #expect(run.markers.map(\.kind) == [.playerDeath, .bossPull, .bossKill])
+        #expect(tracker.current == nil)
+        #expect(!tracker.isInInstance)
+    }
+
+    @Test func delveLeftWithoutKillingTheBossIsAbandoned() {
+        var tracker = ActivityTracker()
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        _ = tracker.handle(.init(date: t0, event: .zoneChange(instanceID: 3003, name: "The Darkway", difficultyID: 208)))
+        let changed = tracker.handle(.init(date: t0 + 300, event: .zoneChange(instanceID: 0, name: "Silvermoon City", difficultyID: 0)))
+        #expect(changed.first?.result == .abandoned)
+        #expect(changed.first?.duration() == 300)
+    }
+
+    @Test func delveTakesTheRealNameAfterUnknownArea() {
+        var tracker = ActivityTracker()
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        _ = tracker.handle(.init(date: t0, event: .zoneChange(instanceID: 3003, name: "UNKNOWN AREA", difficultyID: 208)))
+        let changed = tracker.handle(.init(date: t0 + 1, event: .zoneChange(instanceID: 3003, name: "The Darkway", difficultyID: 208)))
+        #expect(changed.first?.title == "The Darkway")
+        #expect(tracker.current?.start == t0)
+    }
+
+    @Test func newLogFileKeepsDelveRunOpen() {
+        var tracker = ActivityTracker()
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        _ = tracker.handle(.init(date: t0, event: .zoneChange(instanceID: 3003, name: "The Darkway", difficultyID: 208)))
+        #expect(tracker.logFileChanged(at: t0 + 10).isEmpty)
+        #expect(tracker.current?.kind == .delve)
+    }
+
+    @Test func openWorldWithLeftoverDifficultyIsNotAnInstance() throws {
+        // Logged when leaving Murder Row: zone 0 but the dungeon's difficulty carried over.
+        let entry = try #require(CombatLogParser.parse(line: #"10/6/2026 21:17:43.337-7  ZONE_CHANGE,0,"Silvermoon City",23"#))
+        var tracker = ActivityTracker()
+        _ = tracker.handle(.init(date: entry.date, event: .zoneChange(instanceID: 2813, name: "Murder Row", difficultyID: 23)))
+        #expect(tracker.isInInstance)
+        _ = tracker.handle(entry)
+        #expect(!tracker.isInInstance)
+        #expect(!tracker.wantsRecording)
+    }
+
     @Test func raidPullsBecomeSeparateActivities() throws {
         var tracker = ActivityTracker()
         let library = try replay("raid", into: &tracker)

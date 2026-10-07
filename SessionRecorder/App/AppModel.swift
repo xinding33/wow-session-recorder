@@ -56,6 +56,13 @@ final class AppModel {
     private var graceUntil: Date?
     /// A standby bookmark records forward until this moment.
     private var recordUntil: Date?
+    /// A new combat log file appeared and its first zone line hasn't arrived yet.
+    ///
+    /// WoW creates the file the instant logging starts but can hold the lines back for a
+    /// minute or more. The helper addon only starts logging on entering an instance, so a new
+    /// file means "probably just zoned in": record now, and let the zone line confirm it.
+    private var awaitingZoneSince: Date?
+    private static let awaitingZoneTimeout: TimeInterval = 10 * 60
     private var trackerWantedRecording = false
     private var lastWantsFootage: Bool?
 
@@ -265,12 +272,38 @@ final class AppModel {
         evaluateRecording()
     }
 
-    /// Instances-only mode needs the combat log to know where you are. Without the helper
-    /// addon or a recently active log, it falls back to recording everything.
+    var helperAddonStatus: HelperAddon.Status {
+        retailFolder.map(HelperAddon.status(retail:)) ?? .notInstalled
+    }
+
+    /// Instances-only mode needs the combat log to know where you are. Without a working
+    /// helper addon or a recently active log, it falls back to recording everything.
     var canDetectInstances: Bool {
-        if let retailFolder, HelperAddon.installedVersion(retail: retailFolder) != nil { return true }
+        switch helperAddonStatus {
+        case .active, .notLoadedYet: return true
+        case .disabled, .notInstalled: break
+        }
         if let last = combatLogLastWrite, Date().timeIntervalSince(last) < 300 { return true }
         return false
+    }
+
+    /// Why instances-only mode is recording everything, for the menu and settings.
+    var fallbackReason: String {
+        helperAddonStatus == .disabled
+            ? "The helper addon is turned off in WoW's addon list"
+            : "Combat logging isn't on"
+    }
+
+    /// Inside an instance the log is written almost constantly. If it's been silent this long,
+    /// assume you've left even if the zone line never arrived.
+    private static let quietLogTimeout: TimeInterval = 5 * 60
+
+    /// Footage is needed because of where you are or what's in progress.
+    private func trackerNeedsFootage(now: Date) -> Bool {
+        if tracker.current != nil || tracker.manualClip != nil { return true }
+        guard tracker.isInInstance else { return false }
+        guard let last = combatLogLastWrite else { return true }
+        return now.timeIntervalSince(last) < Self.quietLogTimeout
     }
 
     var isRecordingEverythingAsFallback: Bool {
@@ -279,7 +312,8 @@ final class AppModel {
 
     private func wantsFootage(now: Date) -> Bool {
         guard settings.recordingScope == .instancesOnly, canDetectInstances else { return true }
-        if tracker.wantsRecording { return true }
+        if trackerNeedsFootage(now: now) { return true }
+        if let awaitingZoneSince, now.timeIntervalSince(awaitingZoneSince) < Self.awaitingZoneTimeout { return true }
         if let recordUntil, recordUntil > now { return true }
         if let graceUntil, graceUntil > now { return true }
         return false
@@ -288,7 +322,7 @@ final class AppModel {
     /// Starts or stops capture when the need for footage changes.
     private func evaluateRecording() {
         let now = Date()
-        let trackerWants = tracker.wantsRecording
+        let trackerWants = trackerNeedsFootage(now: now)
         if trackerWantedRecording, !trackerWants {
             graceUntil = now.addingTimeInterval(Self.leaveGracePeriod)
         }
@@ -331,7 +365,9 @@ final class AppModel {
             onNewFile: { [weak self] in
                 Task { @MainActor in
                     guard let self else { return }
+                    self.awaitingZoneSince = Date()
                     self.apply(self.tracker.logFileChanged(at: Date()))
+                    self.evaluateRecording()
                 }
             },
             onWrite: { [weak self] date in
@@ -339,6 +375,8 @@ final class AppModel {
             },
             onSeedZone: { [weak self] entry in
                 Task { @MainActor in
+                    // The log was written within the last few minutes, or it wouldn't be seeded.
+                    self?.combatLogLastWrite = self?.combatLogLastWrite ?? Date()
                     self?.tracker.seedZone(from: entry)
                     self?.evaluateRecording()
                 }
@@ -350,6 +388,7 @@ final class AppModel {
 
     private func handle(_ entries: [CombatLogEntry]) {
         for entry in entries {
+            if case .zoneChange = entry.event { awaitingZoneSince = nil }
             apply(tracker.handle(entry))
         }
         evaluateRecording()

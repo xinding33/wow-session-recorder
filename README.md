@@ -16,7 +16,8 @@ Created in [T3 Code](https://t3.codes).
 - **Labelling.** The app follows `_retail_/Logs/WoWCombatLog-*.txt` and turns events into
   activities:
   - `CHALLENGE_MODE_START/END` → a Mythic+ run, with boss pulls, kills and wipes as markers
-  - `ENCOUNTER_START/END` → a raid, dungeon or delve boss pull (kill or wipe)
+  - Entering a delve → one delve run until you leave, with the boss as a marker
+  - `ENCOUNTER_START/END` → a raid or dungeon boss pull (kill or wipe)
   - `ARENA_MATCH_START/END` → an arena match (win or loss)
   - `UNIT_DIED` → death markers for you and your group (Feign Death is ignored)
 - **Trimming.** Footage is recorded continuously and matched to events by timestamp, so the
@@ -67,12 +68,17 @@ The app can install it for you with one click. In game, `/srh` shows its status;
 
 Settings → Recording → **Record: Only in instances** records only in dungeons, raids and
 delves, including Mythic+. Recording starts when you zone in and keeps going for 2 minutes
-after you leave; a key in progress keeps recording even if you step outside. This skips
+after you leave; a key in progress keeps recording even if you step outside. WoW can hold
+combat log lines back for a minute or more, so recording starts as soon as a new log file
+appears (the helper addon starts one when you zone in) rather than waiting for its contents. This skips
 town, queues and character select, roughly 6 GB per hour of footage that would otherwise
 be deleted.
 
 - It reads your location from the combat log, so it needs the helper addon (or
-  `/combatlog`). Without a log it falls back to recording everything and says so.
+  `/combatlog`). If the addon is missing or turned off in WoW's addon list, it falls back
+  to recording everything and says so.
+- If the log goes quiet for 5 minutes, it assumes you've left the instance even if WoW never
+  wrote the zone change.
 - Battlegrounds and other PvP aren't detected.
 - In the open world, ⌃⌥B starts a 1-minute recording from the moment you press it (there's
   no earlier footage to save), and ⌃⌥C records until you press it again.
