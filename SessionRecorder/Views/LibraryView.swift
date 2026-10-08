@@ -21,6 +21,9 @@ struct LibraryView: View {
     var body: some View {
         let section = sectionFilter.apply(model.activities, gameData: model.gameData)
         let shown = filter.isNarrowed ? effectiveFilter.apply(section, gameData: model.gameData) : section
+        // Rows can leave the list while selected (unfavorited in Favorites, a note edited), so
+        // only what's still shown counts as selected.
+        let selected = selection.isEmpty ? [] : shown.filter { selection.contains($0.id) }
         NavigationSplitView {
             Sidebar(selection: $sidebar)
                 .navigationSplitViewColumnWidth(min: 180, ideal: 200)
@@ -37,17 +40,18 @@ struct LibraryView: View {
             }
             .navigationSplitViewColumnWidth(min: 300, ideal: 360)
         } detail: {
-            detail
+            detail(selected: selected)
                 .environment(\.allowsPlainKeyShortcuts, !isSearchFocused)
         }
         .onChange(of: filter) { pruneSelection() }
         .onChange(of: sidebar) { pruneSelection() }
         .confirmationDialog(
             "Delete \(pendingDeletion.count) activities?",
-            isPresented: Binding(get: { !pendingDeletion.isEmpty }, set: { if !$0 { pendingDeletion = [] } })
-        ) {
-            Button("Delete", role: .destructive) { delete(pendingDeletion) }
-        } message: {
+            isPresented: Binding(get: { !pendingDeletion.isEmpty }, set: { if !$0 { pendingDeletion = [] } }),
+            presenting: pendingDeletion
+        ) { ids in
+            Button("Delete", role: .destructive) { delete(ids) }
+        } message: { _ in
             Text("Their footage is cleaned up later, unless another activity or a clip still uses it.")
         }
         .onAppear {
@@ -63,7 +67,7 @@ struct LibraryView: View {
     }
 
     @ViewBuilder
-    private var detail: some View {
+    private func detail(selected: [Activity]) -> some View {
         if sidebar == .footage {
             if let session = model.sessions.first(where: { $0.id == selectedSessionID }) {
                 PlayerView(item: playbackItem(for: session))
@@ -72,7 +76,6 @@ struct LibraryView: View {
                                        description: Text("Recent footage is kept for \(model.settings.keepUnmarkedHours) hours."))
             }
         } else {
-            let selected = selection.isEmpty ? [] : model.activities.filter { selection.contains($0.id) }
             if selected.count > 1 {
                 SelectionSummary(activities: selected, onDelete: requestDelete)
             } else if let activity = selected.first {
@@ -248,7 +251,8 @@ private struct ActivityList: View {
             menu(for: ids)
         }
         .onDeleteCommand {
-            if !selection.isEmpty { onDelete(selection) }
+            let ids = Set(activities.lazy.map(\.id).filter(selection.contains))
+            if !ids.isEmpty { onDelete(ids) }
         }
     }
 

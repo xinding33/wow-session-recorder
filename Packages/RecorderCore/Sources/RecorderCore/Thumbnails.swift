@@ -48,11 +48,16 @@ public enum Thumbnails {
 
     /// The segment file and the time within it to take the still from. Falls back to the first
     /// footage inside the activity when recording was paused at the chosen moment.
-    public static func source(for activity: Activity, segments: [Segment]) -> (url: URL, time: TimeInterval)? {
+    ///
+    /// `footageEnd` is where the newest finished segment ends. Until footage reaches the end of
+    /// the activity, a missing moment may just be in the segment still recording, so this
+    /// returns `nil` to try again later rather than settle for the fallback.
+    public static func source(for activity: Activity, segments: [Segment], footageEnd: Date?) -> (url: URL, time: TimeInterval)? {
         guard let moment = moment(for: activity), let end = activity.end else { return nil }
         if let segment = segments.first(where: { $0.start <= moment && moment < $0.end }) {
             return (segment.url, moment.timeIntervalSince(segment.start))
         }
+        guard let footageEnd, footageEnd >= end else { return nil }
         guard let segment = segments.first(where: { $0.overlaps(activity.start, end) }) else { return nil }
         let from = max(activity.start, segment.start)
         let to = min(end, segment.end)

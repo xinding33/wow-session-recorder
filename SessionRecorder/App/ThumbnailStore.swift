@@ -19,8 +19,11 @@ final class ThumbnailStore {
     /// Activities with no footage to take a still from, and how much footage there was then,
     /// so rows don't retry until new footage arrives.
     private var unavailable: [UUID: Int] = [:]
+    /// Deleted while their still may have been in the making.
+    private var removed: Set<UUID> = []
     private var isBusy = false
-    private var waiting: [CheckedContinuation<Void, Never>] = []
+    /// Rows waiting for their turn. Resumed with `true` when it's theirs, `false` if cancelled.
+    private var waiting: [(token: UUID, continuation: CheckedContinuation<Bool, Never>)] = []
     private let log = Logger(subsystem: "SessionRecorder", category: "Thumbnails")
 
     init() {
@@ -33,9 +36,10 @@ final class ThumbnailStore {
     }
 
     /// The activity's thumbnail, from memory, disk, or (when this app is frontmost) its footage.
-    /// `segments` is the footage around the activity; `footageCount` changes when footage is
-    /// added or removed.
-    func image(for activity: Activity, segments: [Segment], footageCount: Int, in directory: URL) async -> NSImage? {
+    /// `segments` is the footage around the activity, `footageEnd` where the newest finished
+    /// segment ends, and `footageCount` changes when footage is added or removed.
+    func image(for activity: Activity, segments: [Segment], footageEnd: Date?, footageCount: Int,
+               in directory: URL) async -> NSImage? {
         guard !activity.isInProgress else { return nil }
         let key = activity.id as NSUUID
         if let image = cache.object(forKey: key) { return image }
@@ -45,20 +49,25 @@ final class ThumbnailStore {
             return image
         }
         if unavailable[activity.id] == footageCount { return nil }
-        guard let source = Thumbnails.source(for: activity, segments: segments) else {
+        guard let source = Thumbnails.source(for: activity, segments: segments, footageEnd: footageEnd) else {
             unavailable[activity.id] = footageCount
             return nil
         }
 
-        await waitForTurn()
+        // Scrolled away (or new footage restarted the row) while waiting: give up the place in line.
+        guard await waitForTurn() else { return nil }
         defer { finishTurn() }
-        // Scrolled away while waiting, or another row made it meanwhile.
         guard !Task.isCancelled else { return nil }
         if let image = cache.object(forKey: key) { return image }
 
         let started = ContinuousClock.now
         do {
             let image = try await Self.generate(from: source.url, at: source.time, writingTo: url)
+            if removed.contains(activity.id) {
+                // Deleted while this was being made.
+                try? FileManager.default.removeItem(at: url)
+                return nil
+            }
             log.debug("Made thumbnail in \(started.duration(to: .now), privacy: .public)")
             cache.setObject(image, forKey: key)
             return image
@@ -74,6 +83,7 @@ final class ThumbnailStore {
         for id in ids {
             cache.removeObject(forKey: id as NSUUID)
             unavailable[id] = nil
+            removed.insert(id)
             try? FileManager.default.removeItem(at: directory.appending(path: Thumbnails.fileName(for: id)))
         }
     }
@@ -91,12 +101,24 @@ final class ThumbnailStore {
 
     // MARK: - One at a time, while frontmost
 
-    private func waitForTurn() async {
+    /// Waits until no other still is being made and this app is frontmost. Returns `false` if
+    /// the task was cancelled first; only call `finishTurn()` after a `true`.
+    private func waitForTurn() async -> Bool {
         if !isBusy, NSApp.isActive {
             isBusy = true
-            return
+            return true
         }
-        await withCheckedContinuation { waiting.append($0) }
+        let token = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { waiting.append((token, $0)) }
+        } onCancel: {
+            Task { @MainActor in self.cancelWait(token) }
+        }
+    }
+
+    private func cancelWait(_ token: UUID) {
+        guard let index = waiting.firstIndex(where: { $0.token == token }) else { return }
+        waiting.remove(at: index).continuation.resume(returning: false)
     }
 
     private func finishTurn() {
@@ -108,7 +130,7 @@ final class ThumbnailStore {
     private func startNext() {
         guard !isBusy, NSApp.isActive, !waiting.isEmpty else { return }
         isBusy = true
-        waiting.removeFirst().resume()
+        waiting.removeFirst().continuation.resume(returning: true)
     }
 
     // MARK: - Off the main thread

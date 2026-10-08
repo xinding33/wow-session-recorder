@@ -93,12 +93,13 @@ final class AppModel {
         segments = SegmentIndex.scan(directory: segmentsDirectory)
         do {
             library = try Library.load(from: libraryURL)
+            // Only when the library loaded, or a bad load would take every thumbnail with it.
+            thumbnails.removeOrphans(keeping: Set(library.activities.map(\.id)), in: thumbnailsDirectory)
         } catch {
             log.error("Couldn't load library: \(error.localizedDescription, privacy: .public)")
         }
         closeStaleActivities()
         refreshActivities()
-        thumbnails.removeOrphans(keeping: Set(library.activities.map(\.id)), in: thumbnailsDirectory)
 
         hotkeys.register(.bookmark) { [weak self] in self?.bookmark() }
         hotkeys.register(.clip) { [weak self] in self?.toggleClip() }
@@ -464,7 +465,8 @@ final class AppModel {
     func thumbnail(for activity: Activity) async -> NSImage? {
         guard let end = activity.end else { return nil }
         return await thumbnails.image(for: activity, segments: segments(from: activity.start, to: end),
-                                      footageCount: segments.count, in: thumbnailsDirectory)
+                                      footageEnd: segments.last?.end, footageCount: segments.count,
+                                      in: thumbnailsDirectory)
     }
 
     func setNotes(_ notes: String, for id: Activity.ID) {

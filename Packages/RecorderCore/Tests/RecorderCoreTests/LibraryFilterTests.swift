@@ -220,18 +220,28 @@ struct ThumbnailTests {
 
     @Test func sourceFindsTheSegmentOrTheFirstFootageInside() throws {
         let pull = Activity(kind: .raidEncounter, title: "Boss", start: t0 + 50, end: t0 + 200, result: .kill)
-        let first = try #require(Thumbnails.source(for: pull, segments: [segment(0, 60), segment(60, 120)]))
+        let first = try #require(Thumbnails.source(for: pull, segments: [segment(0, 60), segment(60, 120)], footageEnd: t0 + 120))
         #expect(first.url == segment(0, 60).url)
         #expect(first.time == 55)
         let later = Activity(kind: .raidEncounter, title: "Boss", start: t0 + 58, end: t0 + 200, result: .kill)
-        let second = try #require(Thumbnails.source(for: later, segments: [segment(0, 60), segment(60, 120)]))
+        let second = try #require(Thumbnails.source(for: later, segments: [segment(0, 60), segment(60, 120)], footageEnd: t0 + 120))
         #expect(second.url == segment(60, 120).url)
         #expect(second.time == 3)
         // Recording was paused at the moment; use the first footage inside the activity instead.
-        let gap = try #require(Thumbnails.source(for: pull, segments: [segment(0, 52), segment(150, 210)]))
+        let gap = try #require(Thumbnails.source(for: pull, segments: [segment(0, 52), segment(150, 210)], footageEnd: t0 + 210))
         #expect(gap.url == segment(0, 52).url)
         #expect(gap.time == 51)
-        #expect(Thumbnails.source(for: pull, segments: [segment(300, 360)]) == nil)
+        #expect(Thumbnails.source(for: pull, segments: [segment(300, 360)], footageEnd: t0 + 360) == nil)
+    }
+
+    @Test func sourceWaitsForFootageStillBeingRecorded() throws {
+        // Bookmarked 20 s into a segment that's still recording: don't settle for the one before.
+        let bookmark = Activity(kind: .clip, title: "Bookmark", start: t0 + 40, end: t0 + 90, result: .unknown,
+                                markers: [Marker(date: t0 + 80, kind: .bookmark, label: "Bookmark")])
+        #expect(Thumbnails.source(for: bookmark, segments: [segment(0, 60)], footageEnd: t0 + 60) == nil)
+        let later = try #require(Thumbnails.source(for: bookmark, segments: [segment(0, 60), segment(60, 120)], footageEnd: t0 + 120))
+        #expect(later.url == segment(60, 120).url)
+        #expect(later.time == 17)
     }
 
     @Test func orphanedFilesAreThoseWithoutAnActivity() {
