@@ -37,6 +37,7 @@ final class AppModel {
     }
 
     let settings = AppSettings()
+    let thumbnails = ThumbnailStore()
     private(set) var captureState: CaptureState = .waitingForGame
     /// Newest first.
     private(set) var activities: [Activity] = []
@@ -83,6 +84,7 @@ final class AppModel {
 
     var segmentsDirectory: URL { settings.recordingsURL.appending(path: "Segments", directoryHint: .isDirectory) }
     private var libraryURL: URL { settings.recordingsURL.appending(path: "library.json") }
+    private var thumbnailsDirectory: URL { settings.recordingsURL.appending(path: "Thumbnails", directoryHint: .isDirectory) }
 
     // MARK: - Lifecycle
 
@@ -96,6 +98,7 @@ final class AppModel {
         }
         closeStaleActivities()
         refreshActivities()
+        thumbnails.removeOrphans(keeping: Set(library.activities.map(\.id)), in: thumbnailsDirectory)
 
         hotkeys.register(.bookmark) { [weak self] in self?.bookmark() }
         hotkeys.register(.clip) { [weak self] in self?.toggleClip() }
@@ -437,17 +440,31 @@ final class AppModel {
     // MARK: - Library
 
     func toggleFavorite(_ activity: Activity) {
-        guard let index = library.activities.firstIndex(where: { $0.id == activity.id }) else { return }
-        library.activities[index].isFavorite.toggle()
+        setFavorite(!activity.isFavorite, for: [activity.id])
+    }
+
+    func setFavorite(_ isFavorite: Bool, for ids: Set<Activity.ID>) {
+        for index in library.activities.indices where ids.contains(library.activities[index].id) {
+            library.activities[index].isFavorite = isFavorite
+        }
         refreshActivities()
         scheduleSave()
     }
 
-    /// Removes the activity. Its footage is cleaned up by retention once nothing else needs it.
-    func delete(_ activity: Activity) {
-        library.activities.removeAll { $0.id == activity.id }
+    /// Removes activities and their thumbnails. Their footage is cleaned up by retention once
+    /// nothing else needs it.
+    func delete(_ ids: Set<Activity.ID>) {
+        library.activities.removeAll { ids.contains($0.id) }
+        thumbnails.remove(ids, in: thumbnailsDirectory)
         refreshActivities()
         scheduleSave()
+    }
+
+    /// The activity's library thumbnail, made from its footage if needed.
+    func thumbnail(for activity: Activity) async -> NSImage? {
+        guard let end = activity.end else { return nil }
+        return await thumbnails.image(for: activity, segments: segments(from: activity.start, to: end),
+                                      footageCount: segments.count, in: thumbnailsDirectory)
     }
 
     func setNotes(_ notes: String, for id: Activity.ID) {
@@ -526,6 +543,7 @@ final class AppModel {
         let expired = Set(policy.expiredActivities(library.activities, now: now).map(\.id))
         if !expired.isEmpty {
             library.activities.removeAll { expired.contains($0.id) }
+            thumbnails.remove(expired, in: thumbnailsDirectory)
             refreshActivities()
             scheduleSave()
         }

@@ -36,6 +36,10 @@ Created in [T3 Code](https://t3.codes).
   still be in `_retail_/Logs`). Click a line to see that moment. Set start and end points to
   export part of a recording or keep it as a clip, show or hide marker types, and write notes
   on any activity.
+- **Library.** Search titles, places and notes, and filter by boss or dungeon, result
+  (kill, wipe, timed, depleted, completed, abandoned), key level, date and character. Each
+  row has a thumbnail from its footage. Select several activities (⌘- or ⇧-click, ⌘A) to
+  favorite or delete them together.
 
 ## Requirements
 
@@ -142,6 +146,10 @@ outlives the rest. The filter button above the marker list shows or hides marker
 as you type; a note icon marks activities with notes in the library.
 
 Footage lives in `~/Movies/WoW Session Recorder` by default and can be moved in Settings.
+Thumbnails are cached next to it in `Thumbnails/` (about 20 KB each). They're made the first
+time a row is shown, and only while the recorder is the frontmost app, so nothing is decoded
+while you play. Each one decodes a single keyframe (around 15 ms). A thumbnail is deleted
+with its activity, and kept if the activity's footage is cleaned up first.
 Expect roughly 6–9 GB per hour at 1440p60 before trimming.
 
 ## Project layout
@@ -154,6 +162,8 @@ Packages/RecorderCore/     Pure Swift logic, unit-tested with `swift test`
   Segments.swift             segment naming, index, sessions
   PlaybackTimeline.swift     wall-clock ↔ playback time across segment gaps
   Retention.swift            what to delete and when
+  ActivityFilter.swift       library search, filters and the choices they offer
+  Thumbnails.swift           which frame a thumbnail shows, and its cache files
 SessionRecorder/           The app
   Capture/                   ScreenCaptureKit stream and HEVC segment writer
   CombatLog/                 log file tailer

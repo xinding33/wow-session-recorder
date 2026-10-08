@@ -177,6 +177,7 @@ public struct ActivityTracker: Sendable {
             // WoW sometimes names the zone "UNKNOWN AREA" first, then logs the real name.
             if !isNewInstance, var run = current, currentIsRun, run.kind == .delve, run.title != name {
                 run.title = name
+                run.instanceName = name
                 current = run
                 changed.append(run)
             }
@@ -198,7 +199,8 @@ public struct ActivityTracker: Sendable {
 
             // A delve is recorded as one run from entering to leaving, like a key.
             if isNewInstance, instanceID != 0, Difficulty.delve.contains(difficultyID), current == nil {
-                let run = Activity(kind: .delve, title: name, subtitle: "Delve", start: date)
+                var run = Activity(kind: .delve, title: name, subtitle: "Delve", start: date)
+                run.instanceName = name
                 current = run
                 currentIsRun = true
                 changed.append(run)
@@ -223,6 +225,7 @@ public struct ActivityTracker: Sendable {
                     start: date,
                     markers: [Marker(date: date, kind: .bossPull, label: "Pull: \(name)")]
                 )
+                activity.instanceName = zone?.name
                 activity.encounterID = encounterID
                 activity.difficultyID = difficultyID
                 current = activity
@@ -254,6 +257,7 @@ public struct ActivityTracker: Sendable {
             changed += finishCurrent(at: date, result: .abandoned)
             var key = Activity(kind: .mythicPlus, title: "\(zoneName) +\(keystoneLevel)",
                                subtitle: "Mythic+", start: date)
+            key.instanceName = zoneName
             key.challengeModeID = challengeModeID
             key.keystoneLevel = keystoneLevel
             key.affixIDs = affixIDs
@@ -276,6 +280,7 @@ public struct ActivityTracker: Sendable {
             changed += finishCurrent(at: date, result: .unknown)
             let title = matchType.isEmpty ? "Arena" : "Arena \(matchType)"
             current = Activity(kind: .arena, title: title, subtitle: zone?.name ?? "", start: date)
+            current?.instanceName = zone?.name
             arenaTeamID = teamID
             changed.append(current!)
 
@@ -326,7 +331,7 @@ public struct ActivityTracker: Sendable {
             lastBookmarkClip = clip
             return [clip]
         }
-        let clip = Activity(
+        var clip = Activity(
             kind: .clip,
             title: "Bookmark",
             subtitle: zone?.name ?? "",
@@ -335,6 +340,7 @@ public struct ActivityTracker: Sendable {
             result: .unknown,
             markers: [marker]
         )
+        clip.instanceName = zone?.name
         lastBookmarkClip = clip
         return [clip]
     }
@@ -347,7 +353,8 @@ public struct ActivityTracker: Sendable {
             manualClip = nil
             return [clip]
         }
-        let clip = Activity(kind: .clip, title: "Clip", subtitle: zone?.name ?? "", start: date)
+        var clip = Activity(kind: .clip, title: "Clip", subtitle: zone?.name ?? "", start: date)
+        clip.instanceName = zone?.name
         manualClip = clip
         return [clip]
     }

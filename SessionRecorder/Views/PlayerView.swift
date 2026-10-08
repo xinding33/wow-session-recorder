@@ -3,6 +3,11 @@ import RecorderCore
 import SwiftUI
 import UniformTypeIdentifiers
 
+extension EnvironmentValues {
+    /// Whether the player's single-letter shortcuts (K, I, O…) are on.
+    @Entry var allowsPlainKeyShortcuts = true
+}
+
 struct PlayerView: View {
     let item: PlaybackItem
     @Environment(AppModel.self) private var model
@@ -13,6 +18,8 @@ struct PlayerView: View {
     @State private var savedClipMessage: String?
     /// Plain-letter shortcuts are off while typing notes, or they'd eat the letters.
     @FocusState private var isEditingNotes: Bool
+    /// Off while typing somewhere else in the window, e.g. the library's search field.
+    @Environment(\.allowsPlainKeyShortcuts) private var allowsPlainKeyShortcuts
 
     var body: some View {
         HSplitView {
@@ -157,7 +164,7 @@ struct PlayerView: View {
     }
 
     private func shortcut(_ key: KeyEquivalent) -> KeyboardShortcut? {
-        isEditingNotes ? nil : KeyboardShortcut(key, modifiers: [])
+        isEditingNotes || !allowsPlainKeyShortcuts ? nil : KeyboardShortcut(key, modifiers: [])
     }
 
     private func saveClip() {

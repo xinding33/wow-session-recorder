@@ -23,6 +23,7 @@ struct ActivityTrackerTests {
         #expect(key.kind == .mythicPlus)
         #expect(key.title == "Algeth'ar Academy +10")
         #expect(key.subtitle == "Mythic+ · 16:57")
+        #expect(key.instanceName == "Algeth'ar Academy")
         #expect(key.result == .completed)
         #expect(key.markers.map(\.kind) == [.bossPull, .death, .bossKill, .playerDeath])
         #expect(key.markers.map(\.label) == ["Pull: Overgrown Ancient", "Tankyboi died", "Kill: Overgrown Ancient", "You died"])
@@ -37,6 +38,7 @@ struct ActivityTrackerTests {
         let run = try #require(library.activities.first)
         #expect(run.kind == .delve)
         #expect(run.title == "The Darkway")
+        #expect(run.instanceName == "The Darkway")
         #expect(run.result == .completed)
         #expect(run.subtitle == "Delve · 10:28")
         #expect(run.markers.map(\.kind) == [.playerDeath, .bossPull, .bossKill])
@@ -59,6 +61,7 @@ struct ActivityTrackerTests {
         _ = tracker.handle(.init(date: t0, event: .zoneChange(instanceID: 3003, name: "UNKNOWN AREA", difficultyID: 208)))
         let changed = tracker.handle(.init(date: t0 + 1, event: .zoneChange(instanceID: 3003, name: "The Darkway", difficultyID: 208)))
         #expect(changed.first?.title == "The Darkway")
+        #expect(changed.first?.instanceName == "The Darkway")
         #expect(tracker.current?.start == t0)
     }
 
@@ -90,6 +93,7 @@ struct ActivityTrackerTests {
         #expect(wipe.kind == .raidEncounter)
         #expect(wipe.title == "Imperator Averzian")
         #expect(wipe.subtitle == "The Voidspire · Heroic")
+        #expect(wipe.instanceName == "The Voidspire")
         #expect(wipe.result == .wipe)
         #expect(wipe.duration() == 180)
         #expect(wipe.markers.map(\.kind) == [.bossPull, .death, .bossWipe])

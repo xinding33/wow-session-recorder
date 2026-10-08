@@ -174,6 +174,8 @@ public struct Activity: Codable, Sendable, Hashable, Identifiable {
     public var specID: Int?
     /// Specialization IDs of everyone in the group, including the player.
     public var groupSpecIDs: [Int]?
+    /// The dungeon, raid, delve or zone it happened in.
+    public var instanceName: String?
     public var encounterID: Int?
     public var difficultyID: Int?
     /// Lowest health the boss reached, 0–100, for wipes.
@@ -225,6 +227,7 @@ public struct Activity: Codable, Sendable, Hashable, Identifiable {
             result: .unknown,
             markers: markers.filter { $0.date >= start && $0.date <= end }
         )
+        clip.instanceName = instanceName
         clip.character = character
         clip.specID = specID
         clip.groupSpecIDs = groupSpecIDs
