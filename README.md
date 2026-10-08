@@ -68,6 +68,14 @@ On first launch:
 > after every rebuild. `SIGN_IDENTITY="Apple Development" scripts/build.sh` uses an Apple
 > developer certificate instead.
 
+### Public releases
+
+`scripts/release.sh` builds `build/WoW-Session-Recorder-<version>.dmg`, signed with a
+Developer ID certificate and notarized by Apple, so it opens without Gatekeeper warnings on
+other Macs. It needs a "Developer ID Application" certificate in your keychain and saved
+notarization credentials; the top of the script says how to set up both. Bump
+`MARKETING_VERSION` in the Xcode project before each release.
+
 ## The helper addon
 
 WoW turns combat logging off at every logout, and without the log there's nothing to label.
@@ -174,6 +182,7 @@ SessionRecorder/           The app
 addon/SessionRecorderHelper/ The WoW addon (bundled into the app at build time)
 scripts/make-icon.swift      Draws the app icon; rerun after editing it
 scripts/make-signing-cert.sh Creates the local signing certificate, once per Mac
+scripts/release.sh           Builds a signed, notarized disk image for public releases
 ```
 
 Run the core tests with:

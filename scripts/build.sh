@@ -41,7 +41,11 @@ if ! xcodebuild \
 fi
 grep -E "\.swift:[0-9]+:[0-9]+: warning:" "$LOG" | sort -u || true
 
-codesign --force --options runtime --sign "$IDENTITY" "$APP"
+# Notarization needs a secure timestamp, which takes a round trip to Apple, so only public
+# builds get one.
+TIMESTAMP="--timestamp=none"
+case "$IDENTITY" in "Developer ID Application"*) TIMESTAMP="--timestamp" ;; esac
+codesign --force --options runtime "$TIMESTAMP" --sign "$IDENTITY" "$APP"
 if [ "$IDENTITY" = "-" ]; then
     echo "Built $APP (signed ad hoc: macOS will ask for permissions again; see scripts/make-signing-cert.sh)"
 else
