@@ -31,11 +31,15 @@ public struct GameData: Sendable, Equatable {
     public var keystones: [Int: Keystone] = [:]
     public var affixes: [Int: String] = [:]
     public var specs: [Int: Spec] = [:]
+    /// Your characters' major cooldowns: spell ID → base cooldown in seconds.
+    public var cooldowns: [Int: Int] = [:]
 
-    public init(keystones: [Int: Keystone] = [:], affixes: [Int: String] = [:], specs: [Int: Spec] = [:]) {
+    public init(keystones: [Int: Keystone] = [:], affixes: [Int: String] = [:], specs: [Int: Spec] = [:],
+                cooldowns: [Int: Int] = [:]) {
         self.keystones = keystones
         self.affixes = affixes
         self.specs = specs
+        self.cooldowns = cooldowns
     }
 
     public func spec(_ id: Int) -> Spec? {
@@ -58,6 +62,10 @@ public struct GameData: Sendable, Equatable {
             guard let id = key.intValue, let spec = entry["spec"]?.stringValue,
                   let className = entry["class"]?.stringValue else { continue }
             specs[id] = Spec(spec: spec, className: className)
+        }
+        for (key, entry) in data["cooldowns"]?.entries ?? [] {
+            guard let id = key.intValue, let seconds = entry.intValue else { continue }
+            cooldowns[id] = seconds
         }
     }
 

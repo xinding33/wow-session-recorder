@@ -363,6 +363,7 @@ final class AppModel {
         gameDataSource = (url, modified)
         if let db = LuaSavedVariables.parse(text)["SessionRecorderHelperDB"] {
             gameData = GameData(savedVariables: db)
+            tracker.options.cooldownSpellIDs = Set(gameData.cooldowns.keys)
         }
     }
 
@@ -447,6 +448,62 @@ final class AppModel {
         library.activities.removeAll { $0.id == activity.id }
         refreshActivities()
         scheduleSave()
+    }
+
+    func setNotes(_ notes: String, for id: Activity.ID) {
+        guard let index = library.activities.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        library.activities[index].notes = trimmed.isEmpty ? nil : notes
+        refreshActivities()
+        scheduleSave()
+    }
+
+    /// Keeps part of a recording as its own clip, so its footage outlives the rest.
+    @discardableResult
+    func saveClip(of item: PlaybackItem, from start: Date, to end: Date) -> Activity {
+        let clip: Activity
+        if let id = item.activityID, let activity = library.activities.first(where: { $0.id == id }) {
+            clip = activity.clip(from: start, to: end)
+        } else {
+            clip = Activity(kind: .clip, title: "\(item.title) (clip)", start: start, end: end, result: .unknown,
+                            markers: item.markers.filter { $0.date >= start && $0.date <= end })
+        }
+        apply([clip])
+        return clip
+    }
+
+    enum DeathRecapError: LocalizedError {
+        case noLogsFolder
+        case logMissing
+        case nothingLogged
+
+        var errorDescription: String? {
+            switch self {
+            case .noLogsFolder: "Set your WoW install in Settings to read death recaps from the combat log."
+            case .logMissing: "The combat log for this death is no longer in WoW's Logs folder."
+            case .nothingLogged: "The combat log has nothing about this death."
+            }
+        }
+    }
+
+    /// What led up to a death, read back from the combat log.
+    func deathRecap(for marker: Marker) async throws -> DeathRecap {
+        guard let guid = marker.unitGUID else { throw DeathRecapError.nothingLogged }
+        guard let retailFolder else { throw DeathRecapError.noLogsFolder }
+        let logs = WoWInstall.logsFolder(in: retailFolder)
+        // Newer death markers know their exact line; older ones are found by their time.
+        let hinted = marker.log.map { logs.appending(path: $0.fileName) }
+            .flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
+        guard let url = hinted ?? CombatLogFiles.file(at: marker.date, in: logs) else { throw DeathRecapError.logMissing }
+        let anchor = hinted != nil ? marker.log?.offset : nil
+        let from = marker.date.addingTimeInterval(-DeathRecap.window)
+        let to = marker.date.addingTimeInterval(1)
+        let recap = try await Task.detached(priority: .userInitiated) {
+            DeathRecap.build(lines: try CombatLogFiles.lines(in: url, anchor: anchor, from: from, to: to),
+                             unitGUID: guid, death: marker.date)
+        }.value
+        guard !recap.events.isEmpty else { throw DeathRecapError.nothingLogged }
+        return recap
     }
 
     func segments(from start: Date, to end: Date) -> [Segment] {

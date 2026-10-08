@@ -20,6 +20,7 @@ Created in [T3 Code](https://t3.codes).
   - `ENCOUNTER_START/END` → a raid or dungeon boss pull (kill or wipe)
   - `ARENA_MATCH_START/END` → an arena match (win or loss)
   - `UNIT_DIED` → death markers for you and your group (Feign Death is ignored)
+  - your interrupts and dispels, your major cooldowns, Bloodlust and battle resses → markers
 - **Details.** Each activity also records your character and spec, the group's specs, pull
   numbers per boss per night, the boss's lowest health on wipes, and for keys the level,
   affixes and whether it was timed (+1/+2/+3) or depleted. It also remembers where in the
@@ -30,6 +31,11 @@ Created in [T3 Code](https://t3.codes).
 - **Playback.** Segments are stitched into a single seamless timeline on the fly, with
   markers on the scrub bar, a marker list, 0.25×–2× speed, frame stepping and passthrough
   MP4 export.
+- **Review.** Click a death to see a death recap: every hit and heal in the 10 seconds before
+  it, with health after each, read back from the combat log (so it needs that log file to
+  still be in `_retail_/Logs`). Click a line to see that moment. Set start and end points to
+  export part of a recording or keep it as a clip, show or hide marker types, and write notes
+  on any activity.
 
 ## Requirements
 
@@ -65,8 +71,13 @@ WoW turns combat logging off at every logout, and without the log there's nothin
   back off when you leave (only if it turned it on itself)
 - enables Advanced Combat Logging if it's off
 - saves Mythic+ timers, affix names and spec names from the game (the combat log only has
-  IDs), so keys show timed/depleted. WoW writes these on logout or `/reload`, so results
-  appear after your first logout with the addon installed
+  IDs), so keys show timed/depleted
+- saves which of your class and spec spells have a cooldown of a minute or more, so the app
+  can mark when you use them
+
+WoW writes this data on logout or `/reload`, so timed/depleted results and cooldown markers
+appear after your first logout or `/reload` with the addon installed. Cooldowns are learned
+per character, so log in on each character once.
 
 The app can install it for you with one click. In game, `/srh` shows its status;
 `/srh always` and `/srh off` change its mode.
@@ -114,8 +125,21 @@ giving them time to sync.
 | Pause recording | Menu bar → Pause Recording |
 | Review | Menu bar → Open Library… |
 
-In the player: **K** plays or pauses, **[** and **]** jump between markers, and the arrow
-keys step frames.
+In the player:
+
+| Key | Action |
+| --- | --- |
+| **K** | Play or pause |
+| **[** / **]** | Previous or next marker |
+| **←** / **→** | Step one frame |
+| **I** / **O** | Start or end the selection here |
+| **X** | Clear the selection |
+
+With a selection, **Export → Export Selection…** saves just that part as an MP4 without
+re-encoding, and the scissors button keeps it in the library under Clips, so its footage
+outlives the rest. The filter button above the marker list shows or hides marker types
+(interrupts, dispels, cooldowns and so on); the choice is remembered. The **Notes** tab saves
+as you type; a note icon marks activities with notes in the library.
 
 Footage lives in `~/Movies/WoW Session Recorder` by default and can be moved in Settings.
 Expect roughly 6–9 GB per hour at 1440p60 before trimming.
@@ -126,6 +150,7 @@ Expect roughly 6–9 GB per hour at 1440p60 before trimming.
 Packages/RecorderCore/     Pure Swift logic, unit-tested with `swift test`
   CombatLogParser.swift      log line and timestamp parsing
   ActivityTracker.swift      events → activities state machine
+  DeathRecap.swift           death recaps, read back from log files on demand
   Segments.swift             segment naming, index, sessions
   PlaybackTimeline.swift     wall-clock ↔ playback time across segment gaps
   Retention.swift            what to delete and when

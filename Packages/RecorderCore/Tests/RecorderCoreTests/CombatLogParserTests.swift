@@ -101,5 +101,30 @@ struct CombatLogParserTests {
             print("  \(a.kind.displayName): \(a.title) [\(a.subtitle)] \(a.result.displayName)\(health) \(ActivityTracker.formatDuration(a.duration())) markers=\(a.markers.count) | \(a.character ?? "?") \(spec) group=\(a.groupSpecIDs ?? []) key=\(a.keystoneLevel.map(String.init) ?? "-") affixes=\(a.affixIDs ?? []) log=\(a.log.map { "\($0.startOffset)-\($0.endOffset.map(String.init) ?? "?")" } ?? "-")")
         }
         #expect(parsed > 0)
+
+        let markers = library.activities.flatMap(\.markers)
+        let counts = Dictionary(grouping: markers, by: \.kind).mapValues(\.count)
+        print("Markers by kind: \(counts.sorted { $0.key.rawValue < $1.key.rawValue }.map { "\($0.key.rawValue)=\($0.value)" }.joined(separator: " "))")
+
+        // Death recaps, read back from the file both from the marker's position and by
+        // searching for its timestamp; both must agree.
+        let url = URL(fileURLWithPath: path)
+        for death in markers.filter({ $0.kind == .playerDeath }) {
+            let guid = try #require(death.unitGUID)
+            let from = death.date.addingTimeInterval(-DeathRecap.window)
+            let to = death.date.addingTimeInterval(1)
+            let start = Date()
+            let anchored = try CombatLogFiles.lines(in: url, anchor: death.log?.offset, from: from, to: to)
+            let anchoredTime = Date().timeIntervalSince(start)
+            let searched = try CombatLogFiles.lines(in: url, anchor: nil, from: from, to: to)
+            let recap = DeathRecap.build(lines: anchored, unitGUID: guid, death: death.date)
+            #expect(recap == DeathRecap.build(lines: searched, unitGUID: guid, death: death.date))
+            #expect(!recap.events.isEmpty)
+            print("Death at \(death.date) (\(anchored.count) lines read in \(String(format: "%.3f", anchoredTime)) s):")
+            for e in recap.events {
+                let hp = e.healthPercent.map { String(format: "%3.0f%%", $0) } ?? "   ?"
+                print("  \(String(format: "%5.1f", e.date.timeIntervalSince(death.date)))s \(hp) \(e.kind == .heal ? "+" : "-")\(e.amount) \(e.ability) (\(e.source))\(e.overkill > 0 ? " overkill \(e.overkill)" : "")")
+            }
+        }
     }
 }

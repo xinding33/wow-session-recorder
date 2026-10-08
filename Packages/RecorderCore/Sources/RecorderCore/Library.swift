@@ -28,6 +28,7 @@ public struct Library: Codable, Sendable, Equatable {
         for var update in updates {
             if let index = activities.firstIndex(where: { $0.id == update.id }) {
                 update.isFavorite = activities[index].isFavorite
+                update.notes = activities[index].notes
                 activities[index] = update
             } else {
                 activities.append(update)

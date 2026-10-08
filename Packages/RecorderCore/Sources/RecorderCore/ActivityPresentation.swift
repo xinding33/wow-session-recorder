@@ -45,7 +45,7 @@ public enum ActivityPresentation {
         return parts.joined(separator: " · ")
     }
 
-    /// Extra detail shown on hover: character, group and affixes.
+    /// Extra detail shown on hover: character, group, affixes and notes.
     public static func tooltip(for activity: Activity, gameData: GameData) -> String {
         var lines: [String] = []
         if let character = activity.character { lines.append("Character: \(character)") }
@@ -57,6 +57,9 @@ public enum ActivityPresentation {
         }
         if let time = activity.keyTimeMs, let map = activity.challengeModeID, let limit = gameData.keystones[map]?.timeLimit {
             lines.append("Time: \(ActivityTracker.formatDuration(Double(time) / 1000)) of \(ActivityTracker.formatDuration(Double(limit)))")
+        }
+        if let notes = activity.notes {
+            lines.append("Notes: \(notes)")
         }
         return lines.joined(separator: "\n")
     }

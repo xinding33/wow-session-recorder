@@ -54,7 +54,7 @@ struct LibraryView: View {
         } else if let activity = model.activities.first(where: { $0.id == selectedActivityID }) {
             PlayerView(item: PlaybackItem(
                 title: activity.title, start: activity.start, end: activity.end ?? .distantFuture,
-                markers: activity.markers, focus: focus(for: activity)))
+                markers: activity.markers, focus: focus(for: activity), activityID: activity.id))
         } else {
             ContentUnavailableView("Select an Activity", systemImage: "play.rectangle")
         }
@@ -195,6 +195,9 @@ private struct ActivityRow: View {
                     Text(activity.title).fontWeight(.medium).lineLimit(1)
                     if activity.isFavorite {
                         Image(systemName: "star.fill").font(.caption).foregroundStyle(.yellow)
+                    }
+                    if activity.notes != nil {
+                        Image(systemName: "note.text").font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 Text(ActivityPresentation.caption(for: activity, gameData: gameData, pullNumber: pullNumber))

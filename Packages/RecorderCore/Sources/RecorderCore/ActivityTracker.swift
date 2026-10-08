@@ -15,6 +15,8 @@ public struct ActivityTracker: Sendable {
         public var forwardClipLength: TimeInterval = 60
         /// Activities left open longer than this are closed as abandoned.
         public var maxActivityDuration: TimeInterval = 3 * 60 * 60
+        /// The player's major cooldowns (spell IDs), marked when cast. Learned by the helper addon.
+        public var cooldownSpellIDs: Set<Int> = []
 
         public init() {}
     }
@@ -80,11 +82,18 @@ public struct ActivityTracker: Sendable {
 
     public mutating func handle(_ entry: CombatLogEntry) -> [Activity] {
         switch entry.event {
-        case let .ownCast(guid, name):
-            guard guid != playerGUID else { return [] }
-            playerGUID = guid
-            playerName = Self.shortName(name)
-            return refreshDetails()
+        case let .ownCast(guid, name, spellID, spellName):
+            var changed: [Activity] = []
+            if guid != playerGUID {
+                playerGUID = guid
+                playerName = Self.shortName(name)
+                changed += refreshDetails()
+            }
+            // Rebirth and friends are marked when the resurrection lands instead.
+            if options.cooldownSpellIDs.contains(spellID), !CombatLogParser.battleResSpellIDs.contains(spellID) {
+                changed += addMarker(Marker(date: entry.date, kind: .cooldown, label: spellName))
+            }
+            return changed
         case let .combatantInfo(guid, specID):
             combatants[guid] = specID
             return refreshDetails()
@@ -142,6 +151,24 @@ public struct ActivityTracker: Sendable {
         switch entry.event {
         case .logVersion, .ownCast, .combatantInfo, .hostileHealth:
             break
+
+        case let .interrupt(_, interruptedSpell, _):
+            changed += addMarker(Marker(date: date, kind: .interrupt, label: "Interrupted \(interruptedSpell)"))
+
+        case let .dispel(_, auraName, targetName, targetIsHostile):
+            let label = targetIsHostile
+                ? "Purged \(auraName)"
+                : "Dispelled \(auraName) from \(displayName(targetName))"
+            changed += addMarker(Marker(date: date, kind: .dispel, label: label))
+
+        case let .bloodlust(sourceName, spellName):
+            changed += addMarker(Marker(date: date, kind: .bloodlust, label: "\(spellName) (\(displayName(sourceName)))"))
+
+        case let .resurrect(sourceName, targetName, spellID, spellName):
+            // Out of combat anyone can resurrect, so outside a boss fight only battle res spells count.
+            guard currentEncounterID != nil || CombatLogParser.battleResSpellIDs.contains(spellID) else { break }
+            changed += addMarker(Marker(date: date, kind: .battleRes,
+                                        label: "\(spellName) on \(displayName(targetName)) (\(displayName(sourceName)))"))
 
         case let .zoneChange(instanceID, name, difficultyID):
             defer { zone = (instanceID, name, difficultyID) }
@@ -258,18 +285,26 @@ public struct ActivityTracker: Sendable {
             changed += finishCurrent(at: date, result: result)
 
         case let .playerDied(guid, name, isMine):
-            let marker = Marker(date: date, kind: isMine ? .playerDeath : .death,
-                                label: isMine ? "You died" : "\(Self.shortName(name)) died", unitGUID: guid)
-            if var open = current {
-                open.markers.append(marker)
-                current = open
-                changed.append(open)
-            }
-            if var clip = manualClip {
-                clip.markers.append(marker)
-                manualClip = clip
-                changed.append(clip)
-            }
+            changed += addMarker(Marker(date: date, kind: isMine ? .playerDeath : .death,
+                                        label: isMine ? "You died" : "\(Self.shortName(name)) died",
+                                        unitGUID: guid, log: position))
+        }
+        return changed
+    }
+
+    /// Adds a marker to the open activity and manual clip. Outside both it's dropped: there's
+    /// nothing to show it on.
+    private mutating func addMarker(_ marker: Marker) -> [Activity] {
+        var changed: [Activity] = []
+        if var open = current {
+            open.markers.append(marker)
+            current = open
+            changed.append(open)
+        }
+        if var clip = manualClip {
+            clip.markers.append(marker)
+            manualClip = clip
+            changed.append(clip)
         }
         return changed
     }
@@ -282,17 +317,7 @@ public struct ActivityTracker: Sendable {
     /// the bookmark and runs forward instead of reaching back.
     public mutating func bookmark(at date: Date, hasFootageBefore: Bool = true) -> [Activity] {
         let marker = Marker(date: date, kind: .bookmark, label: "Bookmark")
-        var changed: [Activity] = []
-        if var open = current {
-            open.markers.append(marker)
-            current = open
-            changed.append(open)
-        }
-        if var clip = manualClip {
-            clip.markers.append(marker)
-            manualClip = clip
-            changed.append(clip)
-        }
+        let changed = addMarker(marker)
         guard changed.isEmpty else { return changed }
 
         if var clip = lastBookmarkClip, let end = clip.end, date <= end {
@@ -364,6 +389,12 @@ public struct ActivityTracker: Sendable {
         keyInstanceID = nil
         arenaTeamID = nil
         return [open]
+    }
+
+    /// A player's name for a marker label: "you" for the logging player, otherwise without realm.
+    private func displayName(_ name: String) -> String {
+        let short = Self.shortName(name)
+        return short == playerName ? "you" : short
     }
 
     /// `"Leafwhisper-Area52-US"` → `"Leafwhisper"`

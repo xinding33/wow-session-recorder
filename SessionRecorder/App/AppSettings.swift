@@ -56,6 +56,10 @@ final class AppSettings {
     var companionAppPaths: [String] { didSet { defaults.set(companionAppPaths, forKey: "companionAppPaths") } }
     var quitCompanionsWithWoW: Bool { didSet { defaults.set(quitCompanionsWithWoW, forKey: "quitCompanionsWithWoW") } }
     var recordingScope: RecordingScope { didSet { defaults.set(recordingScope.rawValue, forKey: "recordingScope") } }
+    /// Marker types the player hides from the timeline and list.
+    var hiddenMarkerCategories: Set<MarkerCategory> {
+        didSet { defaults.set(hiddenMarkerCategories.map(\.rawValue).sorted(), forKey: "hiddenMarkerCategories") }
+    }
 
     init() {
         defaults.register(defaults: [
@@ -84,6 +88,7 @@ final class AppSettings {
         companionAppPaths = defaults.stringArray(forKey: "companionAppPaths") ?? []
         quitCompanionsWithWoW = defaults.bool(forKey: "quitCompanionsWithWoW")
         recordingScope = RecordingScope(rawValue: defaults.string(forKey: "recordingScope") ?? "") ?? .always
+        hiddenMarkerCategories = Set((defaults.stringArray(forKey: "hiddenMarkerCategories") ?? []).compactMap(MarkerCategory.init))
     }
 
     var companionAppURLs: [URL] { companionAppPaths.map { URL(fileURLWithPath: $0) } }

@@ -20,7 +20,7 @@ struct DetailsTests {
 
     @Test func parsesOwnCasts() throws {
         let entry = try #require(CombatLogParser.parse(line: ownCast))
-        #expect(entry.event == .ownCast(guid: "Player-3676-0EDE9128", name: "Leafwhisper-Area52-US"))
+        #expect(entry.event == .ownCast(guid: "Player-3676-0EDE9128", name: "Leafwhisper-Area52-US", spellID: 2645, spellName: "Ghost Wolf"))
     }
 
     @Test func parsesHostileHealthFromBossActions() throws {

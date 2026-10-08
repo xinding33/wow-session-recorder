@@ -15,7 +15,15 @@ public enum CombatEvent: Sendable, Equatable {
     /// A player's loadout, logged at encounter and key start.
     case combatantInfo(guid: String, specID: Int)
     /// The logging player cast something, which identifies who "you" are.
-    case ownCast(guid: String, name: String)
+    case ownCast(guid: String, name: String, spellID: Int, spellName: String)
+    /// The logging player or their pet interrupted `interruptedSpell`.
+    case interrupt(spellName: String, interruptedSpell: String, targetName: String)
+    /// The logging player or their pet removed `auraName` from `targetName`.
+    case dispel(spellName: String, auraName: String, targetName: String, targetIsHostile: Bool)
+    /// Anyone cast Bloodlust or an equivalent.
+    case bloodlust(sourceName: String, spellName: String)
+    /// A player was resurrected. Includes out-of-combat resurrections.
+    case resurrect(sourceName: String, targetName: String, spellID: Int, spellName: String)
     /// Health of a hostile NPC, from the advanced-logging fields of its own attacks and casts.
     case hostileHealth(guid: String, current: Int, max: Int)
 }
@@ -42,6 +50,7 @@ public enum CombatLogParser {
         "COMBAT_LOG_VERSION", "ZONE_CHANGE", "ENCOUNTER_START", "ENCOUNTER_END",
         "CHALLENGE_MODE_START", "CHALLENGE_MODE_END", "ARENA_MATCH_START", "ARENA_MATCH_END",
         "UNIT_DIED", "COMBATANT_INFO", "SPELL_CAST_SUCCESS",
+        "SPELL_INTERRUPT", "SPELL_DISPEL", "SPELL_STOLEN", "SPELL_RESURRECT",
         "SWING_DAMAGE", "SWING_DAMAGE_LANDED", "SPELL_DAMAGE", "RANGE_DAMAGE", "SPELL_PERIODIC_DAMAGE",
     ]
 
@@ -117,8 +126,25 @@ public enum CombatLogParser {
             // leech,haste×3,avoidance,mastery,vers×3,armor,currentSpecID,[talents],...
             guard f.count > 25, f[1].hasPrefix("Player-"), let spec = int(25) else { return nil }
             return .combatantInfo(guid: String(f[1]), specID: spec)
-        case "SPELL_CAST_SUCCESS" where f.count > 3 && f[1].hasPrefix("Player-") && hasFlag(f[3], affiliationMine):
-            return .ownCast(guid: String(f[1]), name: unquote(f[2]))
+        case "SPELL_CAST_SUCCESS" where f.count > 10 && int(9).map(bloodlustSpellIDs.contains) == true:
+            // SPELL_CAST_SUCCESS,src GUID,"src name",src flags,src raid flags,dest ×4,spell ID,"spell name",school,...
+            return .bloodlust(sourceName: unquote(f[2]), spellName: unquote(f[10]))
+        case "SPELL_CAST_SUCCESS" where f.count > 10 && f[1].hasPrefix("Player-") && hasFlag(f[3], affiliationMine):
+            return .ownCast(guid: String(f[1]), name: unquote(f[2]), spellID: int(9) ?? 0, spellName: unquote(f[10]))
+        case "SPELL_INTERRUPT":
+            // SPELL_INTERRUPT,src ×4,dest ×4,spell ID,"spell name",school,interrupted ID,"interrupted name",school
+            guard f.count > 13, hasFlag(f[3], affiliationMine) else { return nil }
+            return .interrupt(spellName: unquote(f[10]), interruptedSpell: unquote(f[13]), targetName: unquote(f[6]))
+        case "SPELL_DISPEL", "SPELL_STOLEN":
+            // SPELL_DISPEL,src ×4,dest ×4,spell ID,"spell name",school,aura ID,"aura name",school,BUFF|DEBUFF
+            guard f.count > 13, hasFlag(f[3], affiliationMine) else { return nil }
+            return .dispel(spellName: unquote(f[10]), auraName: unquote(f[13]), targetName: unquote(f[6]),
+                           targetIsHostile: hasFlag(f[7], reactionHostile))
+        case "SPELL_RESURRECT":
+            // SPELL_RESURRECT,src ×4,dest ×4,spell ID,"spell name",school
+            guard f.count > 10, f[5].hasPrefix("Player-") else { return nil }
+            return .resurrect(sourceName: unquote(f[2]), targetName: unquote(f[6]),
+                              spellID: int(9) ?? 0, spellName: unquote(f[10]))
         default:
             return hostileHealth(name: name, fields: f)
         }
@@ -142,6 +168,19 @@ public enum CombatLogParser {
     private static func hasFlag(_ field: Substring, _ flag: UInt32) -> Bool {
         (UInt32(field.dropFirst(2), radix: 16) ?? 0) & flag != 0
     }
+
+    /// Bloodlust, Heroism, Time Warp, Primal Rage (both IDs), Fury of the Aspects, Harrier's Cry
+    /// and the leatherworking drums.
+    public static let bloodlustSpellIDs: Set<Int> = [
+        2825, 32182, 80353, 264667, 272678, 390386, 466904,
+        230935, 256740, 309658, 381301, 444257,
+    ]
+
+    /// Resurrections usable in combat: Rebirth, Raise Ally, Intercession, Soulstone and the
+    /// engineering ones.
+    public static let battleResSpellIDs: Set<Int> = [
+        20484, 61999, 391054, 20707, 95750, 345130, 384893, 385403,
+    ]
 
     /// COMBATLOG_OBJECT_REACTION_HOSTILE
     private static let reactionHostile: UInt32 = 0x40

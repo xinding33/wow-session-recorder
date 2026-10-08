@@ -5,7 +5,8 @@
 -- so this addon turns it back on whenever you enter an instance.
 --
 -- It also saves Mythic+ timers, affix names and spec names (the combat log only has IDs) so
--- the app can show timed/depleted results. WoW writes this to SavedVariables on logout/reload.
+-- the app can show timed/depleted results, and which of your spells are major cooldowns so the
+-- app can mark them. WoW writes this to SavedVariables on logout/reload.
 --
 -- /srh             show status
 -- /srh instances   log only inside dungeons, raids, delves and PvP (default)
@@ -93,12 +94,51 @@ local function collectGameData()
     SessionRecorderHelperDB.gameData = data
 end
 
+-- Spells with at least this base cooldown count as major cooldowns.
+local MIN_COOLDOWN_SECONDS = 60
+
+local function baseCooldownSeconds(spellID)
+    if not GetSpellBaseCooldown then return nil end
+    local ok, ms = pcall(GetSpellBaseCooldown, spellID)
+    -- Midnight hides some values in combat as "secret"; they can't be compared.
+    if not ok or type(ms) ~= "number" or (issecretvalue and issecretvalue(ms)) then return nil end
+    return math.floor(ms / 1000)
+end
+
+-- Your class and spec spells (not General: mounts, professions) with a long cooldown. Merged
+-- across characters; the app marks your casts of any of them.
+local function collectCooldowns()
+    if InCombatLockdown() or not (C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines) then return end
+    local data = SessionRecorderHelperDB.gameData or {}
+    data.cooldowns = data.cooldowns or {}
+    local bank = Enum.SpellBookSpellBank.Player
+    for line = 2, C_SpellBook.GetNumSpellBookSkillLines() do
+        local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
+        if info and not info.offSpecID and not info.shouldHide then
+            for slot = info.itemIndexOffset + 1, info.itemIndexOffset + info.numSpellBookItems do
+                local item = C_SpellBook.GetSpellBookItemInfo(slot, bank)
+                if item and item.itemType == Enum.SpellBookItemType.Spell and not item.isPassive then
+                    -- spellID is the talent override if there is one; actionID is the base spell.
+                    for _, spellID in ipairs({ item.actionID, item.spellID }) do
+                        local seconds = spellID and baseCooldownSeconds(spellID)
+                        if seconds and seconds >= MIN_COOLDOWN_SECONDS then
+                            data.cooldowns[spellID] = seconds
+                        end
+                    end
+                end
+            end
+        end
+    end
+    SessionRecorderHelperDB.gameData = data
+end
+
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 frame:RegisterEvent("CHALLENGE_MODE_START")
 frame:RegisterEvent("CHALLENGE_MODE_MAPS_UPDATE")
+frame:RegisterEvent("PLAYER_LOGOUT")
 frame:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
         if arg1 ~= "SessionRecorderHelper" then return end
@@ -112,9 +152,15 @@ frame:SetScript("OnEvent", function(_, event, arg1)
         pcall(collectGameData)
         return
     end
+    if event == "PLAYER_LOGOUT" then
+        -- Also runs on /reload, right before WoW saves; picks up talent changes.
+        pcall(collectCooldowns)
+        return
+    end
     if event == "PLAYER_ENTERING_WORLD" then
         ensureAdvancedLogging()
         pcall(collectGameData)
+        pcall(collectCooldowns)
         if C_MythicPlus and C_MythicPlus.RequestMapInfo then pcall(C_MythicPlus.RequestMapInfo) end
     end
     -- Instance info can lag the zone event slightly.

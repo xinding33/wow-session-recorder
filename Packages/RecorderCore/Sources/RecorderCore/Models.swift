@@ -58,6 +58,28 @@ public struct Marker: Codable, Sendable, Hashable, Identifiable {
         /// Another player in the group died.
         case death
         case bookmark
+        /// The player (or their pet) interrupted a cast.
+        case interrupt
+        /// The player dispelled or purged an aura.
+        case dispel
+        /// The player used one of their major cooldowns.
+        case cooldown
+        /// Bloodlust, Heroism, Time Warp or similar.
+        case bloodlust
+        case battleRes
+
+        public var category: MarkerCategory {
+            switch self {
+            case .bossPull, .bossKill, .bossWipe: .bosses
+            case .playerDeath, .death: .deaths
+            case .bookmark: .bookmarks
+            case .interrupt: .interrupts
+            case .dispel: .dispels
+            case .cooldown: .cooldowns
+            case .bloodlust: .bloodlust
+            case .battleRes: .battleRes
+            }
+        }
     }
 
     public var id: UUID
@@ -66,13 +88,43 @@ public struct Marker: Codable, Sendable, Hashable, Identifiable {
     public var label: String
     /// The unit the marker is about, e.g. who died.
     public var unitGUID: String?
+    /// Where the marker's line is in the combat log, so a death recap can read what led up to it.
+    public var log: LogPosition?
 
-    public init(id: UUID = UUID(), date: Date, kind: Kind, label: String, unitGUID: String? = nil) {
+    public init(id: UUID = UUID(), date: Date, kind: Kind, label: String, unitGUID: String? = nil, log: LogPosition? = nil) {
         self.id = id
         self.date = date
         self.kind = kind
         self.label = label
         self.unitGUID = unitGUID
+        self.log = log
+    }
+}
+
+/// Groups of marker kinds the player can show or hide together.
+public enum MarkerCategory: String, Codable, Sendable, CaseIterable, Identifiable {
+    case bosses
+    case deaths
+    case interrupts
+    case dispels
+    case cooldowns
+    case bloodlust
+    case battleRes
+    case bookmarks
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .bosses: "Boss pulls, kills and wipes"
+        case .deaths: "Deaths"
+        case .interrupts: "Your interrupts"
+        case .dispels: "Your dispels"
+        case .cooldowns: "Your cooldowns"
+        case .bloodlust: "Bloodlust"
+        case .battleRes: "Battle res"
+        case .bookmarks: "Bookmarks"
+        }
     }
 }
 
@@ -91,7 +143,7 @@ public struct LogRange: Codable, Sendable, Hashable {
 }
 
 /// A byte position in a combat log file.
-public struct LogPosition: Sendable, Hashable {
+public struct LogPosition: Codable, Sendable, Hashable {
     public var fileName: String
     public var offset: UInt64
 
@@ -133,6 +185,9 @@ public struct Activity: Codable, Sendable, Hashable, Identifiable {
     public var keyTimeMs: Int?
     public var log: LogRange?
 
+    /// The player's own notes. Kept when the tracker updates the activity.
+    public var notes: String?
+
     public init(
         id: UUID = UUID(),
         kind: ActivityKind,
@@ -156,6 +211,26 @@ public struct Activity: Codable, Sendable, Hashable, Identifiable {
     }
 
     public var isInProgress: Bool { end == nil }
+
+    /// A clip of part of this activity, e.g. a trimmed fight, kept in the library on its own.
+    /// Markers outside the range are dropped; boss and key details aren't carried over, so the
+    /// clip doesn't count as a pull.
+    public func clip(from start: Date, to end: Date, title: String? = nil) -> Activity {
+        var clip = Activity(
+            kind: .clip,
+            title: title ?? "\(self.title) (clip)",
+            subtitle: subtitle,
+            start: start,
+            end: end,
+            result: .unknown,
+            markers: markers.filter { $0.date >= start && $0.date <= end }
+        )
+        clip.character = character
+        clip.specID = specID
+        clip.groupSpecIDs = groupSpecIDs
+        clip.log = log
+        return clip
+    }
 
     public func duration(now: Date = Date()) -> TimeInterval {
         (end ?? now).timeIntervalSince(start)
