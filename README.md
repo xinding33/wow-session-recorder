@@ -62,9 +62,11 @@ On first launch:
 2. **Install the helper addon** from Settings → World of Warcraft (see below), or type
    `/combatlog` in game each session.
 
-> Ad-hoc builds get a new code signature each time, so macOS asks for Screen Recording
-> permission again after every rebuild. Build with `SIGN_IDENTITY="Apple Development"` to
-> keep the permission across builds.
+> macOS remembers permissions by the app's code signature. Run `scripts/make-signing-cert.sh`
+> once to add a local signing certificate to your keychain; every build is then signed the same
+> way and keeps its permissions. Without it, builds are signed ad hoc and macOS asks again
+> after every rebuild. `SIGN_IDENTITY="Apple Development" scripts/build.sh` uses an Apple
+> developer certificate instead.
 
 ## The helper addon
 
@@ -171,6 +173,7 @@ SessionRecorder/           The app
   Views/                     menu bar, library, player, settings
 addon/SessionRecorderHelper/ The WoW addon (bundled into the app at build time)
 scripts/make-icon.swift      Draws the app icon; rerun after editing it
+scripts/make-signing-cert.sh Creates the local signing certificate, once per Mac
 ```
 
 Run the core tests with:

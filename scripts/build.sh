@@ -5,28 +5,48 @@
 #   scripts/build.sh --install    build, then copy to /Applications (or ~/Applications if
 #                                 /Applications isn't writable without admin rights)
 #
-# macOS ties the Screen Recording permission to the app's code signature. Ad-hoc builds
-# (the default) get a new signature every build, so you'll be asked to re-grant permission
-# after rebuilding. Sign with a stable identity to avoid that:
-#
-#   SIGN_IDENTITY="Apple Development" scripts/build.sh --install
+# macOS remembers Screen Recording and file access permissions by the app's signature.
+# Run scripts/make-signing-cert.sh once and every build is signed the same way, so you grant
+# permissions once. Without it, builds are signed ad hoc and ask again after every rebuild.
+# SIGN_IDENTITY overrides the identity, e.g. SIGN_IDENTITY="Apple Development".
 set -eu
 
 cd "$(dirname "$0")/.."
 
-IDENTITY="${SIGN_IDENTITY:--}"
+LOCAL_IDENTITY="WoW Session Recorder Local Signing"
+if [ -n "${SIGN_IDENTITY:-}" ]; then
+    IDENTITY="$SIGN_IDENTITY"
+elif security find-identity -p codesigning | grep -q "\"$LOCAL_IDENTITY\""; then
+    IDENTITY="$LOCAL_IDENTITY"
+else
+    IDENTITY="-"
+fi
 
-xcodebuild \
+APP="build/DerivedData/Build/Products/Release/WoW Session Recorder.app"
+LOG="build/xcodebuild.log"
+mkdir -p build
+rm -rf "$APP"
+
+# Signed below rather than by Xcode, which wants a development team for anything but ad hoc.
+if ! xcodebuild \
     -project SessionRecorder.xcodeproj \
     -scheme SessionRecorder \
     -configuration Release \
     -derivedDataPath build/DerivedData \
-    CODE_SIGN_IDENTITY="$IDENTITY" \
-    build | grep -E "error|warning: |BUILD" || true
+    CODE_SIGNING_ALLOWED=NO \
+    build > "$LOG" 2>&1; then
+    grep -E "error:" "$LOG" | sort -u >&2 || true
+    echo "Build failed; full log in $LOG" >&2
+    exit 1
+fi
+grep -E "\.swift:[0-9]+:[0-9]+: warning:" "$LOG" | sort -u || true
 
-APP="build/DerivedData/Build/Products/Release/WoW Session Recorder.app"
-[ -d "$APP" ] || { echo "Build failed" >&2; exit 1; }
-echo "Built $APP"
+codesign --force --options runtime --sign "$IDENTITY" "$APP"
+if [ "$IDENTITY" = "-" ]; then
+    echo "Built $APP (signed ad hoc: macOS will ask for permissions again; see scripts/make-signing-cert.sh)"
+else
+    echo "Built $APP (signed with \"$IDENTITY\")"
+fi
 
 if [ "${1:-}" = "--install" ]; then
     DEST="/Applications"
