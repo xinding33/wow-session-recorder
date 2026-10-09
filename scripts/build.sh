@@ -9,9 +9,15 @@
 # Run scripts/make-signing-cert.sh once and every build is signed the same way, so you grant
 # permissions once. Without it, builds are signed ad hoc and ask again after every rebuild.
 # SIGN_IDENTITY overrides the identity, e.g. SIGN_IDENTITY="Apple Development".
+#
+# The version comes from RELEASE_VERSION (releases pass the tag), else the latest v* tag.
+# Builds are Apple silicon only.
 set -eu
 
 cd "$(dirname "$0")/.."
+
+VERSION="${RELEASE_VERSION:-$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null | sed 's/^v//')}"
+VERSION="${VERSION:-0.0.0}"
 
 LOCAL_IDENTITY="WoW Session Recorder Local Signing"
 if [ -n "${SIGN_IDENTITY:-}" ]; then
@@ -33,6 +39,9 @@ if ! xcodebuild \
     -scheme SessionRecorder \
     -configuration Release \
     -derivedDataPath build/DerivedData \
+    ARCHS=arm64 \
+    MARKETING_VERSION="$VERSION" \
+    CURRENT_PROJECT_VERSION="$VERSION" \
     CODE_SIGNING_ALLOWED=NO \
     build > "$LOG" 2>&1; then
     grep -E "error:" "$LOG" | sort -u >&2 || true
@@ -46,10 +55,11 @@ grep -E "\.swift:[0-9]+:[0-9]+: warning:" "$LOG" | sort -u || true
 TIMESTAMP="--timestamp=none"
 case "$IDENTITY" in "Developer ID Application"*) TIMESTAMP="--timestamp" ;; esac
 codesign --force --options runtime "$TIMESTAMP" --sign "$IDENTITY" "$APP"
+codesign --verify --strict "$APP"
 if [ "$IDENTITY" = "-" ]; then
-    echo "Built $APP (signed ad hoc: macOS will ask for permissions again; see scripts/make-signing-cert.sh)"
+    echo "Built $APP $VERSION (signed ad hoc: macOS will ask for permissions again; see scripts/make-signing-cert.sh)"
 else
-    echo "Built $APP (signed with \"$IDENTITY\")"
+    echo "Built $APP $VERSION (signed with \"$IDENTITY\")"
 fi
 
 if [ "${1:-}" = "--install" ]; then

@@ -41,12 +41,27 @@ Created in [T3 Code](https://t3.codes).
   row has a thumbnail from its footage. Select several activities (⌘- or ⇧-click, ⌘A) to
   favorite or delete them together.
 
-## Requirements
+## Install
 
-- macOS 15 or later, Apple Silicon recommended
-- Xcode 16 or later to build
+Requires macOS 15 or later on Apple silicon. Releases are signed with a Developer ID and
+notarized by Apple.
+
+```sh
+brew install --cask xinding33/tap/wow-session-recorder
+```
+
+Or download `WoW-Session-Recorder-x.y.z.dmg` from the
+[latest release](https://github.com/xinding33/wow-session-recorder/releases/latest), open it
+and drag the app to Applications. Then see [first launch](#build-and-run) below.
+
+Updating from a build made before 0.1.0 (which used the bundle ID
+`io.github.wowsessionrecorder.SessionRecorder`) keeps your settings, footage and library, but
+macOS asks for Screen Recording permission once more. If you had chosen **At login**, remove
+the old entry from System Settings → General → Login Items if it's listed twice.
 
 ## Build and run
+
+Building needs Xcode 16 or later.
 
 ```sh
 scripts/build.sh --install          # builds Release, copies to /Applications
@@ -68,13 +83,23 @@ On first launch:
 > after every rebuild. `SIGN_IDENTITY="Apple Development" scripts/build.sh` uses an Apple
 > developer certificate instead.
 
-### Public releases
+Builds are Apple silicon only and take their version from the latest `v*` tag.
 
-`scripts/release.sh` builds `build/WoW-Session-Recorder-<version>.dmg`, signed with a
-Developer ID certificate and notarized by Apple, so it opens without Gatekeeper warnings on
-other Macs. It needs a "Developer ID Application" certificate in your keychain and saved
-notarization credentials; the top of the script says how to set up both. Bump
-`MARKETING_VERSION` in the Xcode project before each release.
+### Releases
+
+Pushing a `v*` tag (e.g. `git tag v0.2.0 && git push origin v0.2.0`) runs
+`.github/workflows/release.yml`, which tests, builds, signs with the hardened runtime,
+notarizes and staples `WoW-Session-Recorder-x.y.z.dmg`, publishes it to a GitHub Release, and
+updates the cask in [xinding33/homebrew-tap](https://github.com/xinding33/homebrew-tap). It
+needs these secrets in a `release` environment restricted to `v*` tags: `DEVELOPER_ID_P12` and
+`DEVELOPER_ID_P12_PASSWORD` (the base64-encoded Developer ID Application certificate and its
+password), `NOTARY_KEY`, `NOTARY_KEY_ID` and `NOTARY_ISSUER_ID` (a base64-encoded App Store
+Connect API key), and `TAP_DEPLOY_KEY` (a deploy key with write access to the tap).
+
+To make the same disk image locally, run `scripts/release.sh` (or
+`RELEASE_VERSION=x.y.z scripts/release.sh`). It needs a "Developer ID Application" certificate
+in your keychain and saved notarization credentials; the top of the script says how to set up
+both.
 
 ## The helper addon
 
@@ -120,7 +145,7 @@ be deleted.
 Settings → World of Warcraft → **Open WoW Session Recorder** has three choices:
 
 - **When WoW launches.** Nothing runs while you're not playing. A launchd agent
-  (`~/Library/LaunchAgents/io.github.wowsessionrecorder.open-with-wow.plist`) watches files
+  (`~/Library/LaunchAgents/io.github.xinding33.wow-session-recorder.open-with-wow.plist`) watches files
   WoW rewrites at startup in `_retail_/Logs` and opens the recorder. The recorder quits
   itself when WoW quits, unless the library window is open.
 - **At login.** Stays in the menu bar.
@@ -182,7 +207,8 @@ SessionRecorder/           The app
 addon/SessionRecorderHelper/ The WoW addon (bundled into the app at build time)
 scripts/make-icon.swift      Draws the app icon; rerun after editing it
 scripts/make-signing-cert.sh Creates the local signing certificate, once per Mac
-scripts/release.sh           Builds a signed, notarized disk image for public releases
+scripts/release.sh           Builds a signed, notarized disk image for releases
+scripts/update-cask.sh       Writes the Homebrew cask for a release
 ```
 
 Run the core tests with:

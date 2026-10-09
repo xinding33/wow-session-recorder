@@ -9,14 +9,16 @@ import os
 /// double-checks that WoW is actually running (and the recorder isn't) before opening it, so
 /// stray writes to those files are harmless.
 enum WoWLaunchAgent {
-    static let label = "io.github.wowsessionrecorder.open-with-wow"
+    static let label = "io.github.xinding33.wow-session-recorder.open-with-wow"
 
     /// Written once at WoW startup and not touched again while it runs.
     private static let triggerFiles = ["threadpool.log", "General.log"]
 
     private static let log = Logger(subsystem: "SessionRecorder", category: "LaunchAgent")
 
-    static var plistURL: URL {
+    static var plistURL: URL { plistURL(for: label) }
+
+    private static func plistURL(for label: String) -> URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appending(path: "Library/LaunchAgents/\(label).plist")
     }
@@ -37,7 +39,9 @@ enum WoWLaunchAgent {
         log.info("Installed launch agent watching \(retail.path, privacy: .public)")
     }
 
-    static func uninstall() {
+    /// Removes the agent, or the one with `label`, such as an earlier version's.
+    static func uninstall(label: String = label) {
+        let plistURL = plistURL(for: label)
         guard FileManager.default.fileExists(atPath: plistURL.path) else { return }
         launchctl("bootout", "gui/\(getuid())/\(label)")
         try? FileManager.default.removeItem(at: plistURL)

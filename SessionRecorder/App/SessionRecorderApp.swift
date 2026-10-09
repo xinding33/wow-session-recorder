@@ -33,7 +33,13 @@ enum WindowID {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let model = AppModel()
+    let model: AppModel
+
+    override init() {
+        LegacyInstall.migrate()
+        model = AppModel()
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         model.launch()
