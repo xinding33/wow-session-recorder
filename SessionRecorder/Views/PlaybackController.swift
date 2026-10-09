@@ -75,10 +75,10 @@ final class PlaybackController {
     func load(_ item: PlaybackItem, segments: [Segment]) async {
         let keepPosition = item.identity == loadedIdentity
         loadedIdentity = item.identity
-        let resumeDate = keepPosition ? timeline?.date(for: currentTime) : nil
+        let resumeDate = keepPosition ? self.timeline?.date(for: currentTime) : nil
         // Trim points are kept as real-world times: a reload can insert footage before them.
-        let inDate = keepPosition ? inPoint.flatMap { timeline?.date(for: $0) } : nil
-        let outDate = keepPosition ? outPoint.flatMap { timeline?.date(for: $0) } : nil
+        let inDate = keepPosition ? inPoint.flatMap { self.timeline?.date(for: $0) } : nil
+        let outDate = keepPosition ? outPoint.flatMap { self.timeline?.date(for: $0) } : nil
         inPoint = nil
         outPoint = nil
         let wasPlaying = keepPosition && player.rate != 0
