@@ -257,3 +257,7 @@ Drops should be 0. A low frame rate with no drops means WoW itself was rendering
   on launch.
 - Microphone and voice chat aren't recorded.
 - Hotkeys are fixed.
+
+## Development
+
+WoW Session Recorder's implementation, tests, and documentation were developed with AI assistance.
