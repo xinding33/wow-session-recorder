@@ -51,7 +51,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          gh release create "$GITHUB_REF_NAME" "build/WoW-Session-Recorder-$VERSION.dmg" --title "WoW Session Recorder $VERSION" --generate-notes
+          gh release create "$GITHUB_REF_NAME" "build/WoW-Session-Recorder-$VERSION.dmg" "build/WoW-Session-Recorder-$VERSION.zip" --title "WoW Session Recorder $VERSION" --generate-notes
 
       - name: Update Homebrew cask
         env:
