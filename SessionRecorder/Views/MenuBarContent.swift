@@ -69,6 +69,8 @@ struct MenuBarContent: View {
         .keyboardShortcut("l")
         SettingsLink { Text("Settings…") }
             .keyboardShortcut(",")
+        Button(model.updates.status ?? "Check for Updates…") { model.updates.checkForUpdates() }
+            .disabled(model.updates.status != nil)
 
         Divider()
 

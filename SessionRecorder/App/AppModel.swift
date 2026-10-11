@@ -36,7 +36,8 @@ final class AppModel {
         }
     }
 
-    let settings = AppSettings()
+    let settings: AppSettings
+    let updates: AppUpdater
     let thumbnails = ThumbnailStore()
     private(set) var captureState: CaptureState = .waitingForGame
     /// Newest first.
@@ -86,6 +87,12 @@ final class AppModel {
     private var libraryURL: URL { settings.recordingsURL.appending(path: "library.json") }
     private var thumbnailsDirectory: URL { settings.recordingsURL.appending(path: "Thumbnails", directoryHint: .isDirectory) }
 
+    init() {
+        let settings = AppSettings()
+        self.settings = settings
+        updates = AppUpdater(settings: settings)
+    }
+
     // MARK: - Lifecycle
 
     func launch() {
@@ -122,8 +129,13 @@ final class AppModel {
             }
         }
         runRetention()
+        updates.isRecording = { [weak self] in self?.capture.isRunning ?? false }
+        updateIfUnnoticed()
         Timer.scheduledTimer(withTimeInterval: 600, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.runRetention() }
+            Task { @MainActor in
+                self?.runRetention()
+                self?.updateIfUnnoticed()
+            }
         }
     }
 
@@ -191,19 +203,52 @@ final class AppModel {
             guard !Task.isCancelled, !isGameRunning else { return }
             CompanionApps.quit(companions)
         }
-        guard !Task.isCancelled, !isGameRunning, settings.launchMode == .withWoW else { return }
+        guard !Task.isCancelled, !isGameRunning else { return }
+        guard settings.launchMode == .withWoW else {
+            updateIfUnnoticed()
+            return
+        }
         if isLibraryOpen {
             quitWhenLibraryCloses = true
         } else {
-            NSApp.terminate(nil)
+            await updateAndQuit()
         }
     }
 
     func libraryVisibilityChanged(_ isOpen: Bool) {
         isLibraryOpen = isOpen
         if !isOpen, quitWhenLibraryCloses, !isGameRunning {
-            NSApp.terminate(nil)
+            Task { await updateAndQuit() }
         }
+    }
+
+    // MARK: - Updates
+
+    /// Automatic updates wait for a moment when restarting costs no footage and nobody is
+    /// looking at the app.
+    private var canRestartUnnoticed: Bool {
+        !isGameRunning && !isLibraryOpen && !NSApp.isActive
+    }
+
+    /// Installs an update if one is due and the restart would go unnoticed.
+    private func updateIfUnnoticed() {
+        Task {
+            if await updates.installAutomatically(while: { self.canRestartUnnoticed }) {
+                updates.relaunch()
+            }
+        }
+    }
+
+    /// Quits now that WoW has, installing an update first if one is due. An app that only runs
+    /// alongside WoW has no other moment for it.
+    private func updateAndQuit() async {
+        let updated = await updates.installAutomatically(while: { !self.isGameRunning && !self.isLibraryOpen })
+        if isGameRunning || isLibraryOpen {
+            // Back in use while that ran, so stay, on the new version if one went in.
+            if updated { updates.relaunch() }
+            return
+        }
+        NSApp.terminateFromTask()
     }
 
     private func scheduleCaptureStart(after delay: TimeInterval) {

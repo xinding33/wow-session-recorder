@@ -6,6 +6,7 @@ struct SettingsView: View {
             Tab("Recording", systemImage: "record.circle") { RecordingSettings() }
             Tab("Storage", systemImage: "externaldrive") { StorageSettings() }
             Tab("World of Warcraft", systemImage: "gamecontroller") { GameSettings() }
+            Tab("Updates", systemImage: "arrow.triangle.2.circlepath") { UpdateSettings() }
         }
         .frame(width: 520)
         .onAppear { NSApp.activate() }
@@ -260,6 +261,32 @@ private struct GameSettings: View {
         }
         model.settings.wowRetailPath = retail.path
         model.refreshRetailFolder()
+    }
+}
+
+private struct UpdateSettings: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Version", value: AppUpdater.version.description)
+                HStack {
+                    Spacer()
+                    Button(model.updates.status ?? "Check for Updates…") { model.updates.checkForUpdates() }
+                        .disabled(model.updates.status != nil)
+                }
+                Toggle("Install updates automatically", isOn: Binding(
+                    get: { model.settings.autoUpdate && model.updates.canInstall }, set: { model.settings.autoUpdate = $0 }))
+                    .disabled(!model.updates.canInstall)
+            } footer: {
+                Text(model.updates.canInstall
+                    ? "Checks GitHub once a day and installs new releases while WoW isn't running, so updating never costs you footage."
+                    : "This copy was built from source, so it can't update itself. Pull and build again to update.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 

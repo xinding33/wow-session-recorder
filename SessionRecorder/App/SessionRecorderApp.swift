@@ -27,6 +27,16 @@ struct SessionRecorderApp: App {
     }
 }
 
+extension NSApplication {
+    /// Quits from inside a task. `terminate` waits for `applicationShouldTerminate`'s reply in a
+    /// run loop of its own, and when a main actor task starts that loop, no other main actor
+    /// task runs in it: the shutdown never finishes and the app hangs. Starting from the run
+    /// loop instead lets it through.
+    func terminateFromTask() {
+        RunLoop.main.perform { MainActor.assumeIsolated { NSApp.terminate(nil) } }
+    }
+}
+
 enum WindowID {
     static let library = "library"
 }

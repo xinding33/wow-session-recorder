@@ -1,7 +1,8 @@
 #!/bin/sh
-# Builds a public release: a notarized disk image that opens without Gatekeeper warnings.
+# Builds a public release: a notarized disk image that opens without Gatekeeper warnings, and
+# a zip of the same app for copies that update themselves.
 #
-#   scripts/release.sh                    writes build/WoW-Session-Recorder-<version>.dmg
+#   scripts/release.sh                    writes build/WoW-Session-Recorder-<version>.dmg and .zip
 #   RELEASE_VERSION=1.2.3 scripts/release.sh
 #
 # The version is the latest v* tag unless RELEASE_VERSION is set; pushing a v* tag runs this
@@ -74,6 +75,13 @@ fi
 # Attach the ticket so the image also opens offline.
 xcrun stapler staple "$DMG" >/dev/null
 spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG"
+
+# Installed copies update themselves from a zip (Packages/RecorderCore/.../Update.swift).
+# Notarizing the image covered the app inside it, so the app can take a ticket of its own.
+ZIP="build/WoW-Session-Recorder-$VERSION.zip"
+xcrun stapler staple "$APP" >/dev/null
 spctl --assess --type execute --verbose=2 "$APP"
-echo "Released $DMG (signed with \"$IDENTITY\", notarized)"
+rm -f "$ZIP"
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+echo "Released $DMG and $ZIP (signed with \"$IDENTITY\", notarized)"
 echo "sha256: $(shasum -a 256 "$DMG" | cut -d ' ' -f 1)"

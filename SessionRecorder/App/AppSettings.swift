@@ -56,6 +56,11 @@ final class AppSettings {
     var companionAppPaths: [String] { didSet { defaults.set(companionAppPaths, forKey: "companionAppPaths") } }
     var quitCompanionsWithWoW: Bool { didSet { defaults.set(quitCompanionsWithWoW, forKey: "quitCompanionsWithWoW") } }
     var recordingScope: RecordingScope { didSet { defaults.set(recordingScope.rawValue, forKey: "recordingScope") } }
+    var autoUpdate: Bool { didSet { defaults.set(autoUpdate, forKey: "autoUpdate") } }
+    var lastUpdateCheck: Date {
+        get { defaults.object(forKey: "lastUpdateCheck") as? Date ?? .distantPast }
+        set { defaults.set(newValue, forKey: "lastUpdateCheck") }
+    }
     /// Marker types the player hides from the timeline and list.
     var hiddenMarkerCategories: Set<MarkerCategory> {
         didSet { defaults.set(hiddenMarkerCategories.map(\.rawValue).sorted(), forKey: "hiddenMarkerCategories") }
@@ -70,6 +75,7 @@ final class AppSettings {
             "keepUnmarkedHours": 24,
             "keepActivitiesDays": 30,
             "quitCompanionsWithWoW": true,
+            "autoUpdate": true,
         ])
         autoRecord = defaults.bool(forKey: "autoRecord")
         quality = CaptureQuality(rawValue: defaults.string(forKey: "quality") ?? "") ?? .p1440
@@ -88,6 +94,7 @@ final class AppSettings {
         companionAppPaths = defaults.stringArray(forKey: "companionAppPaths") ?? []
         quitCompanionsWithWoW = defaults.bool(forKey: "quitCompanionsWithWoW")
         recordingScope = RecordingScope(rawValue: defaults.string(forKey: "recordingScope") ?? "") ?? .always
+        autoUpdate = defaults.bool(forKey: "autoUpdate")
         hiddenMarkerCategories = Set((defaults.stringArray(forKey: "hiddenMarkerCategories") ?? []).compactMap(MarkerCategory.init))
     }
 

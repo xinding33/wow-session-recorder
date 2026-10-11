@@ -54,6 +54,18 @@ Or download `WoW-Session-Recorder-x.y.z.dmg` from the
 [latest release](https://github.com/xinding33/wow-session-recorder/releases/latest), open it
 and drag the app to Applications. Then see [first launch](#build-and-run) below.
 
+### Updating
+
+WoW Session Recorder updates itself: once a day it checks for a new
+[release](https://github.com/xinding33/wow-session-recorder/releases), checks that it's signed
+by the same developer, replaces itself and restarts. It only does this while WoW isn't running
+and the library is closed, so an update never costs you footage; if it opens with WoW, it
+updates as it quits. To turn that off, switch off **Install updates automatically** in
+Settings → Updates, and use **Check for Updates…** there or in the menu instead.
+`brew upgrade` also works: it quits the app, so open it again afterwards.
+
+Version 0.1.0 can't update itself, so move on from it with `brew upgrade` or a fresh download.
+
 Updating from a build made before 0.1.0 (which used the bundle ID
 `io.github.wowsessionrecorder.SessionRecorder`) keeps your settings, footage and library, but
 macOS asks for Screen Recording permission once more. If you had chosen **At login**, remove
@@ -83,20 +95,25 @@ On first launch:
 > after every rebuild. `SIGN_IDENTITY="Apple Development" scripts/build.sh` uses an Apple
 > developer certificate instead.
 
+Builds you make yourself can't install releases from the menu, since they aren't signed by the
+same developer; pull and build again to update.
+
 Builds are Apple silicon only and take their version from the latest `v*` tag.
 
 ### Releases
 
 Pushing a `v*` tag (e.g. `git tag v0.2.0 && git push origin v0.2.0`) runs
 `.github/workflows/release.yml`, which tests, builds, signs with the hardened runtime,
-notarizes and staples `WoW-Session-Recorder-x.y.z.dmg`, publishes it to a GitHub Release, and
-updates the cask in [xinding33/homebrew-tap](https://github.com/xinding33/homebrew-tap). It
+notarizes and staples `WoW-Session-Recorder-x.y.z.dmg`, publishes it to a GitHub Release
+along with `WoW-Session-Recorder-x.y.z.zip` (the same app, which installed copies update
+themselves from), and updates the cask in
+[xinding33/homebrew-tap](https://github.com/xinding33/homebrew-tap). It
 needs these secrets in a `release` environment restricted to `v*` tags: `DEVELOPER_ID_P12` and
 `DEVELOPER_ID_P12_PASSWORD` (the base64-encoded Developer ID Application certificate and its
 password), `NOTARY_KEY`, `NOTARY_KEY_ID` and `NOTARY_ISSUER_ID` (a base64-encoded App Store
 Connect API key), and `TAP_DEPLOY_KEY` (a deploy key with write access to the tap).
 
-To make the same disk image locally, run `scripts/release.sh` (or
+To make the same disk image and zip locally, run `scripts/release.sh` (or
 `RELEASE_VERSION=x.y.z scripts/release.sh`). It needs a "Developer ID Application" certificate
 in your keychain and saved notarization credentials; the top of the script says how to set up
 both.
@@ -163,6 +180,7 @@ giving them time to sync.
 | Start or stop a manual clip | **⌃⌥C** |
 | Pause recording | Menu bar → Pause Recording |
 | Review | Menu bar → Open Library… |
+| Update | Menu bar → Check for Updates… |
 
 In the player:
 
@@ -199,6 +217,7 @@ Packages/RecorderCore/     Pure Swift logic, unit-tested with `swift test`
   Retention.swift            what to delete and when
   ActivityFilter.swift       library search, filters and the choices they offer
   Thumbnails.swift           which frame a thumbnail shows, and its cache files
+  Update.swift               finding, checking and installing a newer release
 SessionRecorder/           The app
   Capture/                   ScreenCaptureKit stream and HEVC segment writer
   CombatLog/                 log file tailer

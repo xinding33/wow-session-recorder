@@ -1,6 +1,10 @@
 #!/bin/sh
 # Writes the wow-session-recorder cask for a release into a homebrew-tap checkout.
 # Usage: scripts/update-cask.sh TAP_DIR VERSION SHA256
+#
+# The app updates itself from the first release after 0.1.0, but the cask doesn't say
+# `auto_updates true` yet: brew upgrade would then skip it, stranding 0.1.0, which can't update
+# itself. Add it in a later release.
 set -eu
 TAP="$1" VERSION="$2" SHA="$3"
 mkdir -p "$TAP/Casks"
