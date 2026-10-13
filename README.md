@@ -165,7 +165,8 @@ Settings → World of Warcraft → **Open WoW Session Recorder** has three choic
   (`~/Library/LaunchAgents/io.github.xinding33.wow-session-recorder.open-with-wow.plist`) watches files
   WoW rewrites at startup in `_retail_/Logs` and opens the recorder. The recorder quits
   itself when WoW quits, unless the library window is open.
-- **At login.** Stays in the menu bar.
+- **At login.** Stays in the menu bar. **Open at Login** in the menu switches this on, and
+  switching it off there goes back to your previous choice.
 - **Manually.**
 
 **Also open with WoW** opens any other apps you play with in the
