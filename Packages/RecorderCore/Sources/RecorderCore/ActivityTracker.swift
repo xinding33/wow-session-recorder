@@ -16,6 +16,7 @@ public struct ActivityTracker: Sendable {
         /// Activities left open longer than this are closed as abandoned.
         public var maxActivityDuration: TimeInterval = 3 * 60 * 60
         /// The player's major cooldowns (spell IDs), marked when cast. Learned by the helper addon.
+        /// All of them are marked; which are shown is up to `CooldownChoices`.
         public var cooldownSpellIDs: Set<Int> = []
 
         public init() {}
@@ -91,7 +92,7 @@ public struct ActivityTracker: Sendable {
             }
             // Rebirth and friends are marked when the resurrection lands instead.
             if options.cooldownSpellIDs.contains(spellID), !CombatLogParser.battleResSpellIDs.contains(spellID) {
-                changed += addMarker(Marker(date: entry.date, kind: .cooldown, label: spellName))
+                changed += addMarker(Marker(date: entry.date, kind: .cooldown, label: spellName, spellID: spellID))
             }
             return changed
         case let .combatantInfo(guid, specID):

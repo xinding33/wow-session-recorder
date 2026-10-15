@@ -49,6 +49,9 @@ final class PlaybackController {
     private(set) var outPoint: Double?
     /// Marker types not shown on the timeline or in the list.
     var hiddenCategories: Set<MarkerCategory> = []
+    /// Which cooldowns show, when cooldowns aren't hidden altogether.
+    var cooldownChoices = CooldownChoices()
+    var learnedCooldowns = LearnedCooldowns()
     var rate: Float = 1 {
         didSet {
             player.defaultRate = rate
@@ -167,7 +170,10 @@ final class PlaybackController {
     }
 
     var visibleMarkers: [TimedMarker] {
-        markers.filter { !hiddenCategories.contains($0.marker.kind.category) }
+        markers.filter {
+            !hiddenCategories.contains($0.marker.kind.category)
+                && cooldownChoices.shows($0.marker, cooldowns: learnedCooldowns)
+        }
     }
 
     /// Marker types this item has, for the show/hide menu.

@@ -59,8 +59,14 @@ struct PlayerView: View {
             Task { await playback.load(item, segments: segments) }
         }
         .onChange(of: item.identity) { recapMarker = nil }
-        .onAppear { playback.hiddenCategories = model.settings.hiddenMarkerCategories }
+        .onAppear {
+            playback.hiddenCategories = model.settings.hiddenMarkerCategories
+            playback.cooldownChoices = model.settings.cooldownChoices
+            playback.learnedCooldowns = model.learnedCooldowns
+        }
         .onChange(of: model.settings.hiddenMarkerCategories) { _, hidden in playback.hiddenCategories = hidden }
+        .onChange(of: model.settings.cooldownChoices) { _, choices in playback.cooldownChoices = choices }
+        .onChange(of: model.learnedCooldowns) { _, learned in playback.learnedCooldowns = learned }
         .onDisappear { playback.stop() }
         .alert("Export Failed", isPresented: .constant(exportError != nil)) {
             Button("OK") { exportError = nil }

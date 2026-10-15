@@ -94,7 +94,8 @@ local function collectGameData()
     SessionRecorderHelperDB.gameData = data
 end
 
--- Spells with at least this base cooldown count as major cooldowns.
+-- Spells with at least this base cooldown count as major cooldowns. The app shows 2 minutes or
+-- more by default and lets you pick.
 local MIN_COOLDOWN_SECONDS = 60
 
 local function baseCooldownSeconds(spellID)
@@ -115,12 +116,27 @@ local function chargeCooldownSeconds(spellID)
     return math.floor(seconds)
 end
 
+local function plainString(value)
+    if type(value) ~= "string" or (issecretvalue and issecretvalue(value)) then return nil end
+    return value
+end
+
+local function spellName(spellID)
+    if not (C_Spell and C_Spell.GetSpellName) then return nil end
+    local ok, name = pcall(C_Spell.GetSpellName, spellID)
+    return ok and plainString(name) or nil
+end
+
 -- Your class and spec spells (not General: mounts, professions) with a long cooldown. Merged
--- across characters; the app marks your casts of any of them.
+-- across characters; the app marks your casts of any of them, and lists them by name and
+-- spellbook tab in its settings so you can pick which to show. cooldowns keeps the shape older
+-- app versions read; the names go in cooldownSpells.
 local function collectCooldowns()
     if InCombatLockdown() or not (C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines) then return end
     local data = SessionRecorderHelperDB.gameData or {}
     data.cooldowns = data.cooldowns or {}
+    data.cooldownSpells = data.cooldownSpells or {}
+    local className = plainString((UnitClass("player")))
     local bank = Enum.SpellBookSpellBank.Player
     for line = 2, C_SpellBook.GetNumSpellBookSkillLines() do
         local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
@@ -134,6 +150,12 @@ local function collectCooldowns()
                                                              chargeCooldownSeconds(spellID) or 0)
                         if seconds and seconds >= MIN_COOLDOWN_SECONDS then
                             data.cooldowns[spellID] = seconds
+                            -- line is the tab's name: the class ("Shaman") or the spec ("Restoration").
+                            data.cooldownSpells[spellID] = {
+                                name = spellName(spellID) or plainString(item.name),
+                                class = className,
+                                line = plainString(info.name),
+                            }
                         end
                     end
                 end
