@@ -16,7 +16,6 @@ struct LibraryView: View {
     @State private var selectedSessionID: FootageSession.ID?
     /// Several activities waiting for the user to confirm their deletion.
     @State private var pendingDeletion: Set<Activity.ID> = []
-    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         let section = sectionFilter.apply(model.activities, gameData: model.gameData)
@@ -35,13 +34,11 @@ struct LibraryView: View {
                     ActivityList(activities: shown, section: section, filter: $filter, selection: $selection,
                                  onDelete: requestDelete)
                         .searchable(text: $filter.text, placement: .toolbar, prompt: "Titles, places and notes")
-                        .searchFocused($isSearchFocused)
                 }
             }
             .navigationSplitViewColumnWidth(min: 300, ideal: 360)
         } detail: {
             detail(selected: selected)
-                .environment(\.allowsPlainKeyShortcuts, !isSearchFocused)
         }
         .onChange(of: filter) { pruneSelection() }
         .onChange(of: sidebar) { pruneSelection() }

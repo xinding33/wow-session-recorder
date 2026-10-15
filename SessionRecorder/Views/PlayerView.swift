@@ -3,11 +3,6 @@ import RecorderCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-extension EnvironmentValues {
-    /// Whether the player's single-letter shortcuts (K, I, O…) are on.
-    @Entry var allowsPlainKeyShortcuts = true
-}
-
 struct PlayerView: View {
     let item: PlaybackItem
     @Environment(AppModel.self) private var model
@@ -17,16 +12,13 @@ struct PlayerView: View {
     @State private var recapMarker: Marker.ID?
     @State private var recaps = DeathRecapStore()
     @State private var savedClipMessage: String?
-    /// Plain-letter shortcuts are off while typing notes, or they'd eat the letters.
-    @FocusState private var isEditingNotes: Bool
-    /// Off while typing somewhere else in the window, e.g. the library's search field.
-    @Environment(\.allowsPlainKeyShortcuts) private var allowsPlainKeyShortcuts
+    @State private var showsShortcuts = false
 
     var body: some View {
         HSplitView {
             VStack(spacing: 0) {
                 ZStack {
-                    PlayerSurface(player: playback.player)
+                    PlayerSurface(player: playback.player, perform: perform)
                     if playback.isLoading {
                         ProgressView()
                     } else if let message = playback.errorMessage {
@@ -46,7 +38,7 @@ struct PlayerView: View {
             .frame(minWidth: 520)
 
             SidePanel(playback: playback, activityID: item.activityID, recapMarker: $recapMarker, recaps: recaps,
-                      notesFocus: $isEditingNotes)
+                      open: open)
                 .frame(minWidth: 240, idealWidth: 300, maxWidth: 420)
         }
         .navigationTitle(item.title)
@@ -86,13 +78,10 @@ struct PlayerView: View {
 
             HStack(spacing: 12) {
                 Button("Previous Marker", systemImage: "backward.end.fill") { playback.jumpToPreviousMarker() }
-                    .keyboardShortcut(shortcut("["))
                     .help("Previous marker ( [ )")
                 Button("Play/Pause", systemImage: "playpause.fill") { playback.togglePlayback() }
-                    .keyboardShortcut(shortcut("k"))
-                    .help("Play/Pause ( K )")
+                    .help("Play/Pause ( Space )")
                 Button("Next Marker", systemImage: "forward.end.fill") { playback.jumpToNextMarker() }
-                    .keyboardShortcut(shortcut("]"))
                     .help("Next marker ( ] )")
 
                 Text("\(formatTime(playback.currentTime)) / \(formatTime(playback.duration))")
@@ -108,12 +97,13 @@ struct PlayerView: View {
                 Spacer()
 
                 Picker("Speed", selection: Binding(get: { playback.rate }, set: { playback.rate = $0 })) {
-                    ForEach([Float(0.25), 0.5, 1, 1.5, 2], id: \.self) { rate in
+                    ForEach(PlaybackController.rates, id: \.self) { rate in
                         Text(rate == 1 ? "1×" : "\(rate.formatted())×").tag(rate)
                     }
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 240)
+                .help("Playback speed ( < and > )")
             }
 
             trimBar
@@ -126,10 +116,8 @@ struct PlayerView: View {
     private var trimBar: some View {
         HStack(spacing: 12) {
             Button("Set Start", systemImage: "arrow.right.to.line") { playback.setInPoint() }
-                .keyboardShortcut(shortcut("i"))
                 .help("Start the selection here ( I )")
             Button("Set End", systemImage: "arrow.left.to.line") { playback.setOutPoint() }
-                .keyboardShortcut(shortcut("o"))
                 .help("End the selection here ( O )")
 
             if let selection = playback.selection {
@@ -137,8 +125,7 @@ struct PlayerView: View {
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
                 Button("Clear Selection", systemImage: "xmark.circle.fill") { playback.clearSelection() }
-                    .keyboardShortcut(shortcut("x"))
-                    .help("Clear the selection ( X )")
+                    .help("Clear the selection ( Esc )")
             } else {
                 Text("Press I and O to select part of the video")
                     .foregroundStyle(.tertiary)
@@ -154,7 +141,7 @@ struct PlayerView: View {
 
             Button("Save as Clip", systemImage: "scissors") { saveClip() }
                 .disabled(playback.selectionDates == nil)
-                .help("Keep the selection in the library as a clip")
+                .help("Keep the selection in the library as a clip ( ⌘S )")
 
             let cannotExportVideo = playback.duration == 0 || playback.isExporting
             Menu {
@@ -173,12 +160,54 @@ struct PlayerView: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .disabled(item.activityID == nil && cannotExportVideo)
-            .help(item.activityID == nil ? "Export to an MP4 file" : "Export to an MP4 file or upload to Warcraft Logs")
+            .help(item.activityID == nil ? "Export to an MP4 file ( ⌘E )" : "Export to an MP4 file ( ⌘E ) or upload to Warcraft Logs")
+
+            Button("Keyboard Shortcuts", systemImage: "keyboard") { showsShortcuts.toggle() }
+                .help("Keyboard shortcuts ( ? )")
+                .popover(isPresented: $showsShortcuts) { PlayerShortcutsView() }
         }
     }
 
-    private func shortcut(_ key: KeyEquivalent) -> KeyboardShortcut? {
-        isEditingNotes || !allowsPlainKeyShortcuts ? nil : KeyboardShortcut(key, modifiers: [])
+    /// Runs a keyboard shortcut. Returns false when it had nothing to act on, so the key
+    /// passes through.
+    private func perform(_ command: PlayerCommand) -> Bool {
+        switch command {
+        case .togglePlayback: playback.togglePlayback()
+        case .skip(let seconds): playback.skip(by: seconds)
+        case .stepFrame(let count): playback.stepFrame(by: count)
+        case .changeSpeed(let steps): playback.changeSpeed(by: steps)
+        case .jump(let fraction): playback.jump(toFraction: fraction)
+        case .toggleMute: playback.toggleMute()
+        case .previousMarker: playback.jumpToPreviousMarker()
+        case .nextMarker: playback.jumpToNextMarker()
+        case .previousDeath, .nextDeath:
+            guard let death = playback.death(command == .nextDeath ? 1 : -1, from: recapMarker) else { return false }
+            open(death)
+        case .setStart: playback.setInPoint()
+        case .setEnd: playback.setOutPoint()
+        case .clearSelection:
+            guard playback.selection != nil else { return false }
+            playback.clearSelection()
+        case .saveClip:
+            guard playback.selectionDates != nil else { return false }
+            saveClip()
+        case .export:
+            guard playback.duration > 0, !playback.isExporting else { return false }
+            let range = playback.selection
+            // Not from inside the key event: the save panel runs its own event loop.
+            DispatchQueue.main.async { export(range: range) }
+        case .showShortcuts: showsShortcuts.toggle()
+        case .toggleFullScreen: return false
+        }
+        return true
+    }
+
+    /// Plays the lead-up to a death and shows what led to it. Starting further back than other
+    /// markers gives the recap time to follow along.
+    private func open(_ death: PlaybackController.TimedMarker) {
+        playback.seek(to: death.time - 5)
+        playback.play()
+        recapMarker = death.id
     }
 
     private func saveClip() {
@@ -239,9 +268,15 @@ private struct PendingFootageBanner: View {
     }
 }
 
-/// AppKit's player view: native scrubbing, frame stepping (←/→), fullscreen and PiP.
+/// AppKit's player view: native scrubbing, frame stepping, fullscreen and PiP. It also hosts
+/// the player's keyboard shortcuts.
 private struct PlayerSurface: NSViewRepresentable {
     let player: AVPlayer
+    let perform: (PlayerCommand) -> Bool
+
+    func makeCoordinator() -> PlayerKeyMonitor {
+        PlayerKeyMonitor()
+    }
 
     func makeNSView(context: Context) -> AVPlayerView {
         let view = AVPlayerView()
@@ -250,11 +285,20 @@ private struct PlayerSurface: NSViewRepresentable {
         view.showsFrameSteppingButtons = true
         view.showsFullScreenToggleButton = true
         view.allowsPictureInPicturePlayback = true
+        view.delegate = context.coordinator
+        context.coordinator.view = view
+        context.coordinator.perform = perform
+        context.coordinator.start()
         return view
     }
 
     func updateNSView(_ view: AVPlayerView, context: Context) {
         if view.player !== player { view.player = player }
+        context.coordinator.perform = perform
+    }
+
+    static func dismantleNSView(_ view: AVPlayerView, coordinator: PlayerKeyMonitor) {
+        coordinator.stop()
     }
 }
 
@@ -313,17 +357,11 @@ private struct SidePanel: View {
     let activityID: Activity.ID?
     @Binding var recapMarker: Marker.ID?
     let recaps: DeathRecapStore
-    var notesFocus: FocusState<Bool>.Binding
+    let open: (PlaybackController.TimedMarker) -> Void
     @State private var tab = Tab.markers
 
-    /// Every death with footage, whether or not death markers are shown on the timeline. A
-    /// footage session can hold a death twice, from an activity and a clip of it.
-    private var deaths: [PlaybackController.TimedMarker] {
-        var seen = Set<Marker.ID>()
-        return playback.markers.filter { $0.marker.kind.category == .deaths && seen.insert($0.id).inserted }
-    }
-
     var body: some View {
+        let deaths = playback.deaths
         VStack(spacing: 0) {
             if let death = deaths.first(where: { $0.id == recapMarker }) {
                 DeathRecapView(death: death, deaths: deaths, backTitle: tab == .deaths ? "Deaths" : "Markers",
@@ -351,7 +389,6 @@ private struct SidePanel: View {
                 case .notes:
                     if let activityID {
                         NotesEditor(activityID: activityID)
-                            .focused(notesFocus)
                     }
                 case .deaths:
                     DeathList(deaths: deaths, recaps: recaps, open: open)
@@ -362,14 +399,6 @@ private struct SidePanel: View {
         }
         // Footage sessions have no notes.
         .onChange(of: activityID) { if activityID == nil, tab == .notes { tab = .markers } }
-    }
-
-    /// Plays the lead-up to a death and shows what led to it. Starting further back than other
-    /// markers gives the recap time to follow along.
-    private func open(_ death: PlaybackController.TimedMarker) {
-        playback.seek(to: death.time - 5)
-        playback.play()
-        recapMarker = death.id
     }
 }
 

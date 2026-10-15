@@ -193,15 +193,23 @@ giving them time to sync.
 | Upload to Warcraft Logs | Library → right-click activities → Upload to Warcraft Logs…, then choose the `Split-…` file in Archon |
 | Update | Settings → Updates → Check for Updates… |
 
-In the player:
+In the player, the keys follow YouTube's and work wherever focus is in the window, except
+while typing. **?** or the keyboard button lists them:
 
 | Key | Action |
 | --- | --- |
-| **K** | Play or pause |
+| **Space** or **K** | Play or pause |
+| **J** / **L** | Back or forward 10 seconds |
+| **←** / **→** | Back or forward 5 seconds (**⇧** for 1 second) |
+| **,** / **.** | Previous or next frame |
+| **<** / **>** | Slower or faster |
+| **0**–**9**, **Home** / **End** | Jump to 0%–90%, the start or the end |
+| **F** / **M** | Full screen / mute |
 | **[** / **]** | Previous or next marker |
-| **←** / **→** | Step one frame |
+| **{** / **}** | Previous or next death, with its recap |
 | **I** / **O** | Start or end the selection here |
-| **X** | Clear the selection |
+| **Esc** or **X** | Clear the selection |
+| **⌘S** / **⌘E** | Save the selection as a clip / export |
 
 With a selection, **Export → Export Selection…** saves just that part as an MP4 without
 re-encoding, and the scissors button keeps it in the library under Clips, so its footage
