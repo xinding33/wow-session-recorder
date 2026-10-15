@@ -269,6 +269,10 @@ final class PlaybackController {
         if let previous = visibleMarkers.last(where: { $0.time - Self.markerLeadIn < currentTime - 1.5 }) { jump(to: previous) }
     }
 
+    func play() {
+        if player.rate == 0 { player.playImmediately(atRate: rate) }
+    }
+
     func togglePlayback() {
         if player.rate == 0 { player.playImmediately(atRate: rate) } else { player.pause() }
     }

@@ -40,6 +40,18 @@ public struct DeathRecap: Sendable, Equatable {
     /// How far back a recap looks.
     public static let window: TimeInterval = 10
 
+    /// Whether playback at `date` is close enough to the death at `death` for the recap to
+    /// follow along: from just before the window to a moment after the death.
+    public static func follows(_ date: Date, death: Date) -> Bool {
+        let offset = date.timeIntervalSince(death)
+        return offset >= -(window + 1) && offset <= 2
+    }
+
+    /// The last of `events` at or before `date`: the one playback has just reached.
+    public static func latest(_ events: [Event], at date: Date) -> Event? {
+        events.last { $0.date <= date }
+    }
+
     /// Builds the recap for `unitGUID` from raw log lines around its death.
     public static func build(lines: [String], unitGUID: String, death: Date, window: TimeInterval = window) -> DeathRecap {
         let from = death.addingTimeInterval(-window)

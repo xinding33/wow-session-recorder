@@ -203,6 +203,21 @@ struct ReviewTests {
         #expect(melee.events.first?.health == nil)
     }
 
+    @Test func recapFollowsPlaybackAroundTheDeath() throws {
+        let recap = DeathRecap.build(lines: deathLines, unitGUID: "Player-3676-0EE16FAF", death: deathDate)
+        #expect(DeathRecap.follows(deathDate.addingTimeInterval(-11), death: deathDate))
+        #expect(DeathRecap.follows(deathDate.addingTimeInterval(2), death: deathDate))
+        #expect(!DeathRecap.follows(deathDate.addingTimeInterval(-12), death: deathDate))
+        #expect(!DeathRecap.follows(deathDate.addingTimeInterval(3), death: deathDate))
+
+        // Before the first hit nothing has happened yet; after the last, the killing blow is current.
+        #expect(DeathRecap.latest(recap.events, at: deathDate.addingTimeInterval(-5)) == nil)
+        let nourish = try #require(CombatTimestamp.parse("5/20/2026 14:30:40.925-7"))
+        #expect(DeathRecap.latest(recap.events, at: nourish)?.ability == "Nourish")
+        #expect(DeathRecap.latest(recap.events, at: nourish.addingTimeInterval(0.1))?.ability == "Nourish")
+        #expect(DeathRecap.latest(recap.events, at: deathDate)?.id == recap.killingBlow?.id)
+    }
+
     // MARK: Log files
 
     @Test func logFileNamesGiveTheirStartTime() throws {
