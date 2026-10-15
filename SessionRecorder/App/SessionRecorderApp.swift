@@ -45,9 +45,11 @@ extension NSApplication {
         RunLoop.main.perform { MainActor.assumeIsolated { NSApp.terminate(nil) } }
     }
 
-    /// Closes the library, settings and any other titled window, leaving the menu bar item.
+    /// Closes the library, settings and any other titled window, minimized ones included, leaving
+    /// the menu bar item.
     func closeAllWindows() {
-        windows.filter { $0.isVisible && $0.styleMask.contains(.titled) }.forEach { $0.close() }
+        windows.filter { ($0.isVisible || $0.isMiniaturized) && $0.styleMask.contains(.titled) }
+            .forEach { $0.close() }
     }
 }
 

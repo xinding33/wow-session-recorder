@@ -72,7 +72,7 @@ struct MenuBarContent: View {
 
         Divider()
 
+        // No ⌘Q here: that only closes the windows (see the app's commands).
         Button("Quit WoW Session Recorder") { NSApp.terminate(nil) }
-            .keyboardShortcut("q")
     }
 }
