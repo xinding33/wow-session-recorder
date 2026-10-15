@@ -149,17 +149,24 @@ struct PlayerView: View {
                 .disabled(playback.selectionDates == nil)
                 .help("Keep the selection in the library as a clip")
 
+            let cannotExportVideo = playback.duration == 0 || playback.isExporting
             Menu {
                 Button("Export Selection…") { export(range: playback.selection) }
-                    .disabled(playback.selection == nil)
+                    .disabled(playback.selection == nil || cannotExportVideo)
                 Button("Export Everything…") { export(range: nil) }
+                    .disabled(cannotExportVideo)
+                if let id = item.activityID {
+                    Divider()
+                    Button("Upload to Warcraft Logs…") { model.uploadToWarcraftLogs([id]) }
+                        .disabled(item.isLive || model.isPreparingUpload)
+                }
             } label: {
                 Label("Export", systemImage: "square.and.arrow.up")
             }
             .menuIndicator(.hidden)
             .fixedSize()
-            .disabled(playback.duration == 0 || playback.isExporting)
-            .help("Export to an MP4 file")
+            .disabled(item.activityID == nil && cannotExportVideo)
+            .help(item.activityID == nil ? "Export to an MP4 file" : "Export to an MP4 file or upload to Warcraft Logs")
         }
     }
 

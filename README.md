@@ -40,6 +40,12 @@ Created in [T3 Code](https://t3.codes).
   (kill, wipe, timed, depleted, completed, abandoned), key level, date and character. Each
   row has a thumbnail from its footage. Select several activities (⌘- or ⇧-click, ⌘A) to
   favorite or delete them together.
+- **Warcraft Logs.** Right-click activities and choose **Upload to Warcraft Logs…** to copy
+  just their part of the combat log into `_retail_/Logs/Split-<title>-<time>.txt`, so one key
+  or pull can be uploaded without the rest of the night. The app shows the file in Finder and
+  opens the [Archon app](https://github.com/RPGLogs/Uploaders-archon-lite/releases/latest)
+  (Warcraft Logs' uploader; the full app or Archon App Lite), where you choose that file.
+  Archon can't be handed a file directly. Split files aren't deleted automatically.
 
 ## Install
 
@@ -180,6 +186,7 @@ giving them time to sync.
 | Start or stop a manual clip | **⌃⌥C** |
 | Pause recording | Menu bar → Pause Recording |
 | Review | Menu bar → Open Library… |
+| Upload to Warcraft Logs | Library → right-click activities → Upload to Warcraft Logs…, then choose the `Split-…` file in Archon |
 | Update | Settings → Updates → Check for Updates… |
 
 In the player:
@@ -212,6 +219,7 @@ Packages/RecorderCore/     Pure Swift logic, unit-tested with `swift test`
   CombatLogParser.swift      log line and timestamp parsing
   ActivityTracker.swift      events → activities state machine
   DeathRecap.swift           death recaps, read back from log files on demand
+  CombatLogSplit.swift       copying activities out of the log for Warcraft Logs
   Segments.swift             segment naming, index, sessions
   PlaybackTimeline.swift     wall-clock ↔ playback time across segment gaps
   Retention.swift            what to delete and when
