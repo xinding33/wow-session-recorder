@@ -54,6 +54,20 @@ struct LibraryView: View {
         } message: { _ in
             Text("Their footage is cleaned up later, unless another activity or a clip still uses it.")
         }
+        .alert(
+            model.uploadNotice?.title ?? "",
+            isPresented: Binding(get: { model.uploadNotice != nil }, set: { if !$0 { model.uploadNotice = nil } }),
+            presenting: model.uploadNotice
+        ) { notice in
+            if notice.offersArchonDownload {
+                Button("Get Archon App Lite") { NSWorkspace.shared.open(ArchonApp.downloadURL) }
+                Button("OK", role: .cancel) {}
+            } else {
+                Button("OK") {}
+            }
+        } message: { notice in
+            Text(notice.message)
+        }
         .onAppear {
             // Behave like a regular app (Dock icon, ⌘-Tab) while the library is open.
             NSApp.setActivationPolicy(.regular)
@@ -268,6 +282,9 @@ private struct ActivityList: View {
         }
         if !chosen.isEmpty {
             Divider()
+            Button("Upload to Warcraft Logs…") { model.uploadToWarcraftLogs(ids) }
+                .disabled(model.isPreparingUpload || chosen.contains(where: \.isInProgress))
+            Divider()
             Button("Delete\(count)\(chosen.count > 1 ? "…" : "")", role: .destructive) { onDelete(ids) }
         }
     }
@@ -377,6 +394,9 @@ private struct SelectionSummary: View {
                     .disabled(favorites == activities.count)
                 Button("Unfavorite", systemImage: "star.slash") { model.setFavorite(false, for: ids) }
                     .disabled(favorites == 0)
+                Button("Upload to Warcraft Logs", systemImage: "arrow.up.doc") { model.uploadToWarcraftLogs(ids) }
+                    .disabled(model.isPreparingUpload || activities.contains(where: \.isInProgress))
+                    .help("Save just these activities' combat log and open the Archon app to upload it")
                 Button("Delete…", systemImage: "trash", role: .destructive) { onDelete(ids) }
             }
             .controlSize(.large)

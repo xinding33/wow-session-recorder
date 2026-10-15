@@ -570,6 +570,78 @@ final class AppModel {
         return recap
     }
 
+    // MARK: - Warcraft Logs
+
+    /// Why an upload couldn't be prepared, or that the Archon app is missing.
+    struct UploadNotice: Identifiable {
+        let id = UUID()
+        let title: String
+        let message: String
+        var offersArchonDownload = false
+    }
+
+    var uploadNotice: UploadNotice?
+    private(set) var isPreparingUpload = false
+
+    /// Copies the activities' part of the combat log into a file of its own in WoW's Logs
+    /// folder, shows it in Finder and opens the Archon app, which uploads it to Warcraft Logs.
+    func uploadToWarcraftLogs(_ ids: Set<Activity.ID>) {
+        guard !isPreparingUpload else { return }
+        guard let retailFolder else {
+            uploadNotice = UploadNotice(title: "Can't Find the Combat Log",
+                                        message: "Set your WoW install in Settings to upload its combat log.")
+            return
+        }
+        let chosen = activities.filter { ids.contains($0.id) }
+        let logs = WoWInstall.logsFolder(in: retailFolder)
+        let destination = logs.appending(path: CombatLogSplit.fileName(for: chosen))
+        let ranges: [LogRange]
+        do {
+            ranges = try CombatLogSplit.ranges(for: chosen, in: activities)
+        } catch {
+            uploadNotice = UploadNotice(title: "Can't Upload This", message: Self.message(for: error))
+            return
+        }
+        isPreparingUpload = true
+        Task {
+            defer { isPreparingUpload = false }
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try CombatLogSplit.write(ranges, from: logs, to: destination)
+                }.value
+            } catch {
+                uploadNotice = UploadNotice(title: "Couldn't Save the Combat Log", message: Self.message(for: error))
+                return
+            }
+            NSWorkspace.shared.activateFileViewerSelecting([destination])
+            if let archon = ArchonApp.url {
+                ArchonApp.open(archon)
+            } else {
+                uploadNotice = UploadNotice(
+                    title: "Install the Archon App",
+                    message: "Saved \(destination.lastPathComponent) in WoW's Logs folder. Warcraft Logs uploads go "
+                        + "through the Archon app or Archon App Lite: install one, then choose this file in it.",
+                    offersArchonDownload: true)
+            }
+        }
+    }
+
+    private static func message(for error: Error) -> String {
+        switch error as? CombatLogSplit.SplitError {
+        case .notLogged(let title):
+            "“\(title)” was recorded by an older version that didn't note where it is in the combat log."
+        case .inProgress(let title):
+            "“\(title)” is still going. Upload it once it ends."
+        case .logMissing(let fileName):
+            "The combat log \(fileName) is no longer in WoW's Logs folder."
+        case .endUnknown(let title):
+            "“\(title)” was saved while its activity was still going, and that activity has since "
+                + "been deleted, so where it ends in the combat log is unknown."
+        case nil:
+            error.localizedDescription
+        }
+    }
+
     func segments(from start: Date, to end: Date) -> [Segment] {
         SegmentIndex.overlapping(segments, start: start, end: end)
     }
