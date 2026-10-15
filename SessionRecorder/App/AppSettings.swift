@@ -52,10 +52,6 @@ final class AppSettings {
     var wowRetailPath: String? { didSet { defaults.set(wowRetailPath, forKey: "wowRetailPath") } }
     var hasLaunchedBefore: Bool { didSet { defaults.set(hasLaunchedBefore, forKey: "hasLaunchedBefore") } }
     var launchMode: LaunchMode { didSet { defaults.set(launchMode.rawValue, forKey: "launchMode") } }
-    /// The mode At login replaced, which the menu's Open at Login goes back to when turned off.
-    var launchModeBeforeLogin: LaunchMode {
-        didSet { defaults.set(launchModeBeforeLogin.rawValue, forKey: "launchModeBeforeLogin") }
-    }
     /// Apps opened when WoW launches and, optionally, quit when it quits.
     var companionAppPaths: [String] { didSet { defaults.set(companionAppPaths, forKey: "companionAppPaths") } }
     var quitCompanionsWithWoW: Bool { didSet { defaults.set(quitCompanionsWithWoW, forKey: "quitCompanionsWithWoW") } }
@@ -95,7 +91,6 @@ final class AppSettings {
         // Earlier versions only had a launch-at-login toggle; carry that choice over.
         launchMode = LaunchMode(rawValue: defaults.string(forKey: "launchMode") ?? "")
             ?? (SMAppService.mainApp.status == .enabled ? .atLogin : .manual)
-        launchModeBeforeLogin = LaunchMode(rawValue: defaults.string(forKey: "launchModeBeforeLogin") ?? "") ?? .manual
         companionAppPaths = defaults.stringArray(forKey: "companionAppPaths") ?? []
         quitCompanionsWithWoW = defaults.bool(forKey: "quitCompanionsWithWoW")
         recordingScope = RecordingScope(rawValue: defaults.string(forKey: "recordingScope") ?? "") ?? .always

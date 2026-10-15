@@ -61,7 +61,7 @@ WoW Session Recorder updates itself: once a day it checks for a new
 by the same developer, replaces itself and restarts. It only does this while WoW isn't running
 and the library is closed, so an update never costs you footage; if it opens with WoW, it
 updates as it quits. To turn that off, switch off **Install updates automatically** in
-Settings → Updates, and use **Check for Updates…** there or in the menu instead.
+Settings → Updates, and use **Check for Updates…** there instead.
 `brew upgrade` also works: it quits the app, so open it again afterwards.
 
 Version 0.1.0 can't update itself, so move on from it with `brew upgrade` or a fresh download.
@@ -165,8 +165,7 @@ Settings → World of Warcraft → **Open WoW Session Recorder** has three choic
   (`~/Library/LaunchAgents/io.github.xinding33.wow-session-recorder.open-with-wow.plist`) watches files
   WoW rewrites at startup in `_retail_/Logs` and opens the recorder. The recorder quits
   itself when WoW quits, unless the library window is open.
-- **At login.** Stays in the menu bar. **Open at Login** in the menu switches this on, and
-  switching it off there goes back to your previous choice.
+- **At login.** Stays in the menu bar.
 - **Manually.**
 
 **Also open with WoW** opens any other apps you play with in the
@@ -181,7 +180,7 @@ giving them time to sync.
 | Start or stop a manual clip | **⌃⌥C** |
 | Pause recording | Menu bar → Pause Recording |
 | Review | Menu bar → Open Library… |
-| Update | Menu bar → Check for Updates… |
+| Update | Settings → Updates → Check for Updates… |
 
 In the player:
 

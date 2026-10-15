@@ -608,20 +608,8 @@ final class AppModel {
     // MARK: - Settings helpers
 
     func setLaunchMode(_ mode: LaunchMode) {
-        if mode == .atLogin, settings.launchMode != .atLogin {
-            settings.launchModeBeforeLogin = settings.launchMode
-        }
         settings.launchMode = mode
         applyLaunchMode()
-    }
-
-    /// Turning this off goes back to the mode it replaced, so Open with WoW isn't lost.
-    func setOpensAtLogin(_ opensAtLogin: Bool) {
-        if opensAtLogin {
-            setLaunchMode(.atLogin)
-        } else if settings.launchMode == .atLogin {
-            setLaunchMode(settings.launchModeBeforeLogin)
-        }
     }
 
     /// Makes the login item and the Open-with-WoW agent match the chosen launch mode.

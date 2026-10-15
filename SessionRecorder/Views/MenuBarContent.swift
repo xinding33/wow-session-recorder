@@ -67,12 +67,8 @@ struct MenuBarContent: View {
             NSApp.activate()
         }
         .keyboardShortcut("l")
-        Toggle("Open at Login", isOn: Binding(
-            get: { model.settings.launchMode == .atLogin }, set: { model.setOpensAtLogin($0) }))
         SettingsLink { Text("Settings…") }
             .keyboardShortcut(",")
-        Button(model.updates.status ?? "Check for Updates…") { model.updates.checkForUpdates() }
-            .disabled(model.updates.status != nil)
 
         Divider()
 
