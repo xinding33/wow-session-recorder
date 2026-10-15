@@ -105,6 +105,16 @@ local function baseCooldownSeconds(spellID)
     return math.floor(ms / 1000)
 end
 
+-- Some spells, like Spirit Link Totem, keep their cooldown as a single charge's recharge time
+-- and have no base cooldown.
+local function chargeCooldownSeconds(spellID)
+    if not (C_Spell and C_Spell.GetSpellCharges) then return nil end
+    local ok, info = pcall(C_Spell.GetSpellCharges, spellID)
+    local seconds = ok and type(info) == "table" and info.cooldownDuration
+    if type(seconds) ~= "number" or (issecretvalue and issecretvalue(seconds)) then return nil end
+    return math.floor(seconds)
+end
+
 -- Your class and spec spells (not General: mounts, professions) with a long cooldown. Merged
 -- across characters; the app marks your casts of any of them.
 local function collectCooldowns()
@@ -120,7 +130,8 @@ local function collectCooldowns()
                 if item and item.itemType == Enum.SpellBookItemType.Spell and not item.isPassive then
                     -- spellID is the talent override if there is one; actionID is the base spell.
                     for _, spellID in ipairs({ item.actionID, item.spellID }) do
-                        local seconds = spellID and baseCooldownSeconds(spellID)
+                        local seconds = spellID and math.max(baseCooldownSeconds(spellID) or 0,
+                                                             chargeCooldownSeconds(spellID) or 0)
                         if seconds and seconds >= MIN_COOLDOWN_SECONDS then
                             data.cooldowns[spellID] = seconds
                         end
