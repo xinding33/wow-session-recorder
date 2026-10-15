@@ -24,6 +24,15 @@ struct SessionRecorderApp: App {
             SettingsView()
                 .environment(appDelegate.model)
         }
+        .commands {
+            // ⌘Q only closes the windows, since recording carries on from the menu bar. Quitting
+            // for real is still in the app menu and the menu bar menu.
+            CommandGroup(replacing: .appTermination) {
+                Button("Close All Windows") { NSApp.closeAllWindows() }
+                    .keyboardShortcut("q")
+                Button("Quit WoW Session Recorder") { NSApp.terminate(nil) }
+            }
+        }
     }
 }
 
@@ -34,6 +43,11 @@ extension NSApplication {
     /// loop instead lets it through.
     func terminateFromTask() {
         RunLoop.main.perform { MainActor.assumeIsolated { NSApp.terminate(nil) } }
+    }
+
+    /// Closes the library, settings and any other titled window, leaving the menu bar item.
+    func closeAllWindows() {
+        windows.filter { $0.isVisible && $0.styleMask.contains(.titled) }.forEach { $0.close() }
     }
 }
 
