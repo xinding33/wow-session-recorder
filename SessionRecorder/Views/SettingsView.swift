@@ -1,3 +1,4 @@
+import RecorderCore
 import SwiftUI
 
 struct SettingsView: View {
@@ -6,6 +7,7 @@ struct SettingsView: View {
             Tab("Recording", systemImage: "record.circle") { RecordingSettings() }
             Tab("Storage", systemImage: "externaldrive") { StorageSettings() }
             Tab("World of Warcraft", systemImage: "gamecontroller") { GameSettings() }
+            Tab("Cooldowns", systemImage: "bolt") { CooldownSettings() }
             Tab("Updates", systemImage: "arrow.triangle.2.circlepath") { UpdateSettings() }
         }
         .frame(width: 520)
@@ -261,6 +263,72 @@ private struct GameSettings: View {
         }
         model.settings.wowRetailPath = retail.path
         model.refreshRetailFolder()
+    }
+}
+
+/// Which of your learned cooldowns get markers. The marker filter's "Your cooldowns" switches
+/// them all off.
+private struct CooldownSettings: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let groups = model.learnedCooldowns.groups
+        Form {
+            Section {
+                Toggle("Show cooldown markers", isOn: Binding(
+                    get: { showsCooldowns },
+                    set: { shown in
+                        if shown {
+                            model.settings.hiddenMarkerCategories.remove(.cooldowns)
+                        } else {
+                            model.settings.hiddenMarkerCategories.insert(.cooldowns)
+                        }
+                    }))
+            } footer: {
+                Text("Your class and spec spells with a cooldown of a minute or more are marked when you cast them. Those of 2 minutes or more show unless you turn them off. Changes apply to earlier recordings too.")
+                    .foregroundStyle(.secondary)
+            }
+
+            if groups.isEmpty {
+                Section {
+                    Text("The helper addon learns your cooldowns when you log in or /reload. Log in on each character once.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            ForEach(groups) { group in
+                Section {
+                    ForEach(group.spells) { spell in
+                        Toggle(isOn: isShown(spell)) {
+                            Text("\(spell.name) \(Text("· \(spell.durationText)").foregroundStyle(.secondary))")
+                        }
+                    }
+                } header: {
+                    if let title = group.title {
+                        Text(title)
+                    } else if groups.count > 1 {
+                        Text("Other")
+                    }
+                } footer: {
+                    if group.title == nil {
+                        Text("Names and classes for these arrive the next time you log in on that character with the latest helper addon.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(!showsCooldowns)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(minHeight: 300, idealHeight: 500)
+    }
+
+    private var showsCooldowns: Bool {
+        !model.settings.hiddenMarkerCategories.contains(.cooldowns)
+    }
+
+    private func isShown(_ spell: LearnedCooldowns.Spell) -> Binding<Bool> {
+        Binding(
+            get: { model.settings.cooldownChoices.isShown(spell.id, seconds: spell.seconds) },
+            set: { model.settings.cooldownChoices.setShown($0, spellID: spell.id, seconds: spell.seconds) })
     }
 }
 

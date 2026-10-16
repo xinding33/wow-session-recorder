@@ -65,6 +65,13 @@ final class AppSettings {
     var hiddenMarkerCategories: Set<MarkerCategory> {
         didSet { defaults.set(hiddenMarkerCategories.map(\.rawValue).sorted(), forKey: "hiddenMarkerCategories") }
     }
+    /// Cooldowns the player turned on or off against the 2-minute rule.
+    var cooldownChoices: CooldownChoices {
+        didSet {
+            defaults.set(cooldownChoices.turnedOn.sorted(), forKey: "shownCooldownSpellIDs")
+            defaults.set(cooldownChoices.turnedOff.sorted(), forKey: "hiddenCooldownSpellIDs")
+        }
+    }
 
     init() {
         defaults.register(defaults: [
@@ -96,6 +103,9 @@ final class AppSettings {
         recordingScope = RecordingScope(rawValue: defaults.string(forKey: "recordingScope") ?? "") ?? .always
         autoUpdate = defaults.bool(forKey: "autoUpdate")
         hiddenMarkerCategories = Set((defaults.stringArray(forKey: "hiddenMarkerCategories") ?? []).compactMap(MarkerCategory.init))
+        cooldownChoices = CooldownChoices(
+            turnedOn: Set(defaults.array(forKey: "shownCooldownSpellIDs") as? [Int] ?? []),
+            turnedOff: Set(defaults.array(forKey: "hiddenCooldownSpellIDs") as? [Int] ?? []))
     }
 
     var companionAppURLs: [URL] { companionAppPaths.map { URL(fileURLWithPath: $0) } }

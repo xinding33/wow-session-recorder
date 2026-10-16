@@ -28,18 +28,36 @@ public struct GameData: Sendable, Equatable {
         public var displayName: String { "\(spec) \(className)" }
     }
 
+    /// A learned cooldown's name and where it is in the spellbook.
+    public struct CooldownSpell: Sendable, Equatable {
+        public var name: String?
+        /// e.g. "Shaman".
+        public var className: String?
+        /// The spellbook tab it's on: the class ("Shaman") or a spec ("Restoration").
+        public var skillLine: String?
+
+        public init(name: String? = nil, className: String? = nil, skillLine: String? = nil) {
+            self.name = name
+            self.className = className
+            self.skillLine = skillLine
+        }
+    }
+
     public var keystones: [Int: Keystone] = [:]
     public var affixes: [Int: String] = [:]
     public var specs: [Int: Spec] = [:]
     /// Your characters' major cooldowns: spell ID → base cooldown in seconds.
     public var cooldowns: [Int: Int] = [:]
+    /// Names and spellbook tabs for `cooldowns`. Empty until helper 1.3.0 has run.
+    public var cooldownSpells: [Int: CooldownSpell] = [:]
 
     public init(keystones: [Int: Keystone] = [:], affixes: [Int: String] = [:], specs: [Int: Spec] = [:],
-                cooldowns: [Int: Int] = [:]) {
+                cooldowns: [Int: Int] = [:], cooldownSpells: [Int: CooldownSpell] = [:]) {
         self.keystones = keystones
         self.affixes = affixes
         self.specs = specs
         self.cooldowns = cooldowns
+        self.cooldownSpells = cooldownSpells
     }
 
     public func spec(_ id: Int) -> Spec? {
@@ -66,6 +84,12 @@ public struct GameData: Sendable, Equatable {
         for (key, entry) in data["cooldowns"]?.entries ?? [] {
             guard let id = key.intValue, let seconds = entry.intValue else { continue }
             cooldowns[id] = seconds
+        }
+        // A table of its own, so `cooldowns` keeps the shape older app versions read.
+        for (key, entry) in data["cooldownSpells"]?.entries ?? [] {
+            guard let id = key.intValue else { continue }
+            cooldownSpells[id] = CooldownSpell(name: entry["name"]?.stringValue, className: entry["class"]?.stringValue,
+                                               skillLine: entry["line"]?.stringValue)
         }
     }
 

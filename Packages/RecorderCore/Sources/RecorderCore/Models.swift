@@ -90,14 +90,18 @@ public struct Marker: Codable, Sendable, Hashable, Identifiable {
     public var unitGUID: String?
     /// Where the marker's line is in the combat log, so a death recap can read what led up to it.
     public var log: LogPosition?
+    /// The spell cast, for cooldowns. Older cooldown markers only have the name in `label`.
+    public var spellID: Int?
 
-    public init(id: UUID = UUID(), date: Date, kind: Kind, label: String, unitGUID: String? = nil, log: LogPosition? = nil) {
+    public init(id: UUID = UUID(), date: Date, kind: Kind, label: String, unitGUID: String? = nil, log: LogPosition? = nil,
+                spellID: Int? = nil) {
         self.id = id
         self.date = date
         self.kind = kind
         self.label = label
         self.unitGUID = unitGUID
         self.log = log
+        self.spellID = spellID
     }
 }
 

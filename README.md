@@ -136,8 +136,10 @@ WoW turns combat logging off at every logout, and without the log there's nothin
 - enables Advanced Combat Logging if it's off
 - saves Mythic+ timers, affix names and spec names from the game (the combat log only has
   IDs), so keys show timed/depleted
-- saves which of your class and spec spells have a cooldown of a minute or more, so the app
-  can mark when you use them
+- saves which of your class and spec spells have a cooldown of a minute or more, with their
+  names and spellbook tab, so the app can mark when you use them. Settings → Cooldowns lists
+  them by class and spec: those of 2 minutes or more show by default, and you can turn any
+  spell on or off, including in earlier recordings
 
 WoW writes this data on logout or `/reload`, so timed/depleted results and cooldown markers
 appear after your first logout or `/reload` with the addon installed. Cooldowns are learned
@@ -204,7 +206,8 @@ In the player:
 With a selection, **Export → Export Selection…** saves just that part as an MP4 without
 re-encoding, and the scissors button keeps it in the library under Clips, so its footage
 outlives the rest. The filter button above the marker list shows or hides marker types
-(interrupts, dispels, cooldowns and so on); the choice is remembered. The **Notes** tab saves
+(interrupts, dispels, cooldowns and so on); the choice is remembered. Which cooldowns show is
+picked per spell in Settings → Cooldowns. The **Notes** tab saves
 as you type; a note icon marks activities with notes in the library.
 
 Footage lives in `~/Movies/WoW Session Recorder` by default and can be moved in Settings.

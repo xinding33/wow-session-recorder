@@ -48,6 +48,8 @@ final class AppModel {
     private(set) var retailFolder: URL?
     /// Timers, affix and spec names saved by the helper addon.
     private(set) var gameData = GameData()
+    /// `gameData`'s cooldowns, named from markers where the addon hasn't named them yet.
+    private(set) var learnedCooldowns = LearnedCooldowns()
     private var gameDataSource: (url: URL, modified: Date)?
     /// Set when the launch mode couldn't be applied (e.g. launchd refused the agent).
     private(set) var launchModeError: String?
@@ -413,7 +415,13 @@ final class AppModel {
         if let db = LuaSavedVariables.parse(text)["SessionRecorderHelperDB"] {
             gameData = GameData(savedVariables: db)
             tracker.options.cooldownSpellIDs = Set(gameData.cooldowns.keys)
+            refreshLearnedCooldowns()
         }
+    }
+
+    /// Spell names come from the addon and from cooldown markers, so this follows both.
+    private func refreshLearnedCooldowns() {
+        learnedCooldowns = LearnedCooldowns(gameData: gameData, markers: library.activities.lazy.flatMap(\.markers))
     }
 
     func refreshRetailFolder() {
@@ -725,6 +733,7 @@ final class AppModel {
         segments = SegmentIndex.scan(directory: segmentsDirectory)
         library = (try? Library.load(from: libraryURL)) ?? Library()
         refreshActivities()
+        refreshLearnedCooldowns()
         restartCapture()
     }
 
@@ -734,6 +743,13 @@ final class AppModel {
         guard !changed.isEmpty else { return }
         library.upsert(changed)
         refreshActivities()
+        // A cast under a name the list hasn't tied to its spell yet names it, and older markers by it.
+        if changed.contains(where: { $0.markers.contains { marker in
+            guard marker.kind == .cooldown, let id = marker.spellID else { return false }
+            return !learnedCooldowns.spellIDs(named: marker.label).contains(id)
+        } }) {
+            refreshLearnedCooldowns()
+        }
         scheduleSave()
     }
 
