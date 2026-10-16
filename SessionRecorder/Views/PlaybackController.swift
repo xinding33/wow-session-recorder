@@ -52,6 +52,7 @@ final class PlaybackController {
     /// Which cooldowns show, when cooldowns aren't hidden altogether.
     var cooldownChoices = CooldownChoices()
     var learnedCooldowns = LearnedCooldowns()
+    static let rates: [Float] = [0.25, 0.5, 1, 1.5, 2]
     var rate: Float = 1 {
         didSet {
             player.defaultRate = rate
@@ -275,12 +276,53 @@ final class PlaybackController {
         if let previous = visibleMarkers.last(where: { $0.time - Self.markerLeadIn < currentTime - 1.5 }) { jump(to: previous) }
     }
 
+    /// Every death with footage, whether or not death markers are shown on the timeline. A
+    /// footage session can hold a death twice, from an activity and a clip of it.
+    var deaths: [TimedMarker] {
+        var seen = Set<Marker.ID>()
+        return markers.filter { $0.marker.kind.category == .deaths && seen.insert($0.id).inserted }
+    }
+
+    /// The death `offset` places from the one whose recap is showing, as its previous and next
+    /// buttons go, so deaths at the same moment aren't skipped. With no recap, the next or
+    /// previous one from the playhead.
+    func death(_ offset: Int, from current: Marker.ID?) -> TimedMarker? {
+        let deaths = deaths
+        if let index = deaths.firstIndex(where: { $0.id == current }) {
+            return deaths.indices.contains(index + offset) ? deaths[index + offset] : nil
+        }
+        return offset > 0 ? deaths.first { $0.time > currentTime } : deaths.last { $0.time < currentTime }
+    }
+
     func play() {
         if player.rate == 0 { player.playImmediately(atRate: rate) }
     }
 
     func togglePlayback() {
         if player.rate == 0 { player.playImmediately(atRate: rate) } else { player.pause() }
+    }
+
+    func skip(by seconds: Double) {
+        seek(to: currentTime + seconds)
+    }
+
+    /// Pauses and steps by whole frames.
+    func stepFrame(by count: Int) {
+        player.pause()
+        player.currentItem?.step(byCount: count)
+    }
+
+    func changeSpeed(by steps: Int) {
+        let index = Self.rates.firstIndex(of: rate) ?? Self.rates.firstIndex(of: 1)!
+        rate = Self.rates[min(max(index + steps, 0), Self.rates.count - 1)]
+    }
+
+    func jump(toFraction fraction: Double) {
+        seek(to: duration * fraction)
+    }
+
+    func toggleMute() {
+        player.isMuted.toggle()
     }
 
     func stop() {
