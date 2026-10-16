@@ -91,14 +91,16 @@ struct CooldownTests {
     @Test func groupsByClassThenSpec() {
         var data = gameData
         data.cooldowns[33891] = 180
+        data.cooldowns[2825] = 300
         data.cooldownSpells[33891] = .init(name: "Incarnation: Tree of Life", className: "Druid", skillLine: "Restoration")
         let learned = LearnedCooldowns(gameData: data, markers: [])
         // Capacitor Totem has no name or tab yet, so it goes last.
         #expect(learned.groups.map(\.title) == ["Restoration Druid", "Shaman", "Restoration Shaman", nil])
         // Longest first, then by name.
         #expect(learned.groups[2].spells.map(\.name) == ["Healing Tide Totem", "Spirit Link Totem"])
-        // Battle resses get their own markers, so they aren't listed.
+        // Battle resses and Bloodlust get their own markers, so they aren't listed.
         #expect(learned[20484] == nil)
+        #expect(learned[2825] == nil)
     }
 
     @Test func durationsReadLikeTooltips() {

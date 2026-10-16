@@ -113,8 +113,9 @@ public struct LearnedCooldowns: Sendable, Equatable {
         for (id, info) in gameData.cooldownSpells {
             if let name = info.name { idsByName[name, default: []].insert(id) }
         }
-        // Battle resses are marked when they land, as battle res markers, so a choice wouldn't do anything.
-        for (id, seconds) in gameData.cooldowns where !CombatLogParser.battleResSpellIDs.contains(id) {
+        // Battle resses and Bloodlust get markers of their own, so a choice wouldn't do anything.
+        for (id, seconds) in gameData.cooldowns
+        where !CombatLogParser.battleResSpellIDs.contains(id) && !CombatLogParser.bloodlustSpellIDs.contains(id) {
             let info = gameData.cooldownSpells[id]
             spells[id] = Spell(id: id, name: info?.name ?? markerNames[id] ?? "Spell \(id)", seconds: seconds,
                                className: info?.className, skillLine: info?.skillLine)
