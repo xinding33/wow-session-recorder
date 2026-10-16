@@ -351,9 +351,11 @@ private struct SidePanel: View {
         .onChange(of: activityID) { if activityID == nil, tab == .notes { tab = .markers } }
     }
 
-    /// Jumps to a death and shows what led to it.
+    /// Plays the lead-up to a death and shows what led to it. Starting further back than other
+    /// markers gives the recap time to follow along.
     private func open(_ death: PlaybackController.TimedMarker) {
-        playback.jump(to: death)
+        playback.seek(to: death.time - 5)
+        playback.play()
         recapMarker = death.id
     }
 }
