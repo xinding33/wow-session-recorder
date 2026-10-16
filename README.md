@@ -32,8 +32,10 @@ Created in [T3 Code](https://t3.codes).
   markers on the scrub bar, a marker list, 0.25×–2× speed, frame stepping and passthrough
   MP4 export.
 - **Review.** Click a death to see a death recap: every hit and heal in the 10 seconds before
-  it, with health after each, read back from the combat log (so it needs that log file to
-  still be in `_retail_/Logs`). Click a line to see that moment. Set start and end points to
+  it, with a health graph, read back from the combat log (so it needs that log file to still
+  be in `_retail_/Logs`). It follows the video, highlighting the hit on screen; click a line
+  or the graph to see that moment. The Deaths tab lists every death in a run with its killing
+  blow, for comparing them side by side. Set start and end points to
   export part of a recording or keep it as a clip, show or hide marker types, and write notes
   on any activity.
 - **Library.** Search titles, places and notes, and filter by boss or dungeon, result

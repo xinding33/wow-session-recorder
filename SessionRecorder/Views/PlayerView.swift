@@ -14,7 +14,8 @@ struct PlayerView: View {
     @State private var playback = PlaybackController()
     @State private var exportError: String?
     /// The death whose recap is showing in the side panel.
-    @State private var recapMarker: Marker?
+    @State private var recapMarker: Marker.ID?
+    @State private var recaps = DeathRecapStore()
     @State private var savedClipMessage: String?
     /// Plain-letter shortcuts are off while typing notes, or they'd eat the letters.
     @FocusState private var isEditingNotes: Bool
@@ -44,7 +45,7 @@ struct PlayerView: View {
             }
             .frame(minWidth: 520)
 
-            SidePanel(playback: playback, activityID: item.activityID, recapMarker: $recapMarker,
+            SidePanel(playback: playback, activityID: item.activityID, recapMarker: $recapMarker, recaps: recaps,
                       notesFocus: $isEditingNotes)
                 .frame(minWidth: 240, idealWidth: 300, maxWidth: 420)
         }
@@ -297,50 +298,72 @@ private struct MarkerTimeline: View {
     }
 }
 
-/// Markers (with the death recap underneath when a death is picked) and, for library
-/// activities, notes.
+/// Markers, deaths and, for library activities, notes. Picking a death shows its recap in
+/// place of the tabs until you go back.
 private struct SidePanel: View {
-    enum Tab { case markers, notes }
+    enum Tab { case markers, deaths, notes }
 
     let playback: PlaybackController
     let activityID: Activity.ID?
-    @Binding var recapMarker: Marker?
+    @Binding var recapMarker: Marker.ID?
+    let recaps: DeathRecapStore
     var notesFocus: FocusState<Bool>.Binding
     @State private var tab = Tab.markers
 
+    /// Every death with footage, whether or not death markers are shown on the timeline. A
+    /// footage session can hold a death twice, from an activity and a clip of it.
+    private var deaths: [PlaybackController.TimedMarker] {
+        var seen = Set<Marker.ID>()
+        return playback.markers.filter { $0.marker.kind.category == .deaths && seen.insert($0.id).inserted }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                if activityID != nil {
+            if let death = deaths.first(where: { $0.id == recapMarker }) {
+                DeathRecapView(death: death, deaths: deaths, backTitle: tab == .deaths ? "Deaths" : "Markers",
+                               playback: playback, recaps: recaps, select: open) { recapMarker = nil }
+            } else {
+                HStack {
                     Picker("Show", selection: $tab) {
                         Text("Markers").tag(Tab.markers)
-                        Text("Notes").tag(Tab.notes)
+                        Text(deaths.isEmpty ? "Deaths" : "Deaths (\(deaths.count))").tag(Tab.deaths)
+                        if activityID != nil {
+                            Text("Notes").tag(Tab.notes)
+                        }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                } else {
-                    Text("Markers").font(.headline)
+                    Spacer()
+                    if tab == .markers {
+                        MarkerFilterMenu(categories: playback.markerCategories)
+                    }
                 }
-                Spacer()
-                if tab == .markers {
-                    MarkerFilterMenu(categories: playback.markerCategories)
-                }
-            }
-            .padding(8)
-            Divider()
+                .padding(8)
+                Divider()
 
-            if tab == .notes, let activityID {
-                NotesEditor(activityID: activityID)
-                    .focused(notesFocus)
-            } else {
-                MarkerList(playback: playback, recapMarker: $recapMarker)
-                if let recapMarker {
-                    Divider()
-                    DeathRecapPanel(marker: recapMarker, playback: playback) { self.recapMarker = nil }
-                        .frame(minHeight: 200, idealHeight: 320)
+                switch tab {
+                case .notes:
+                    if let activityID {
+                        NotesEditor(activityID: activityID)
+                            .focused(notesFocus)
+                    }
+                case .deaths:
+                    DeathList(deaths: deaths, recaps: recaps, open: open)
+                case .markers:
+                    MarkerList(playback: playback, openDeath: open)
                 }
             }
         }
+        // Footage sessions have no notes.
+        .onChange(of: activityID) { if activityID == nil, tab == .notes { tab = .markers } }
+    }
+
+    /// Plays the lead-up to a death and shows what led to it. Starting further back than other
+    /// markers gives the recap time to follow along.
+    private func open(_ death: PlaybackController.TimedMarker) {
+        playback.seek(to: death.time - 5)
+        playback.play()
+        recapMarker = death.id
     }
 }
 
@@ -377,7 +400,7 @@ private struct MarkerFilterMenu: View {
 
 private struct MarkerList: View {
     let playback: PlaybackController
-    @Binding var recapMarker: Marker?
+    let openDeath: (PlaybackController.TimedMarker) -> Void
 
     var body: some View {
         List {
@@ -387,8 +410,11 @@ private struct MarkerList: View {
             }
             ForEach(playback.visibleMarkers) { timed in
                 Button {
-                    playback.jump(to: timed)
-                    if timed.marker.kind.category == .deaths { recapMarker = timed.marker }
+                    if timed.marker.kind.category == .deaths {
+                        openDeath(timed)
+                    } else {
+                        playback.jump(to: timed)
+                    }
                 } label: {
                     HStack {
                         Image(systemName: timed.marker.kind.symbol)
@@ -404,175 +430,10 @@ private struct MarkerList: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .listRowBackground(timed.marker.id == recapMarker?.id ? Color.accentColor.opacity(0.15) : nil)
                 .help(timed.marker.kind.category == .deaths ? "Jump here and show what led to this death" : "")
             }
         }
     }
-}
-
-/// What hit someone in the seconds before they died. Click a line to see it on the video.
-private struct DeathRecapPanel: View {
-    let marker: Marker
-    let playback: PlaybackController
-    let close: () -> Void
-    @Environment(AppModel.self) private var model
-    @State private var state = LoadState.loading
-    @State private var showHealing = true
-
-    enum LoadState {
-        case loading
-        case loaded(DeathRecap)
-        case failed(String)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Death Recap").font(.headline)
-                Text(marker.kind == .playerDeath ? "You" : marker.label.replacingOccurrences(of: " died", with: ""))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Spacer()
-                Toggle("Healing", isOn: $showHealing)
-                    .toggleStyle(.checkbox)
-                    .controlSize(.small)
-                    .help("Show healing received")
-                Button("Close", systemImage: "xmark") { close() }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.borderless)
-            }
-            .padding([.horizontal, .top], 8)
-
-            switch state {
-            case .loading:
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .failed(let message):
-                Text(message)
-                    .foregroundStyle(.secondary)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            case .loaded(let recap):
-                summary(recap)
-                    .padding(.horizontal, 8)
-                List(recap.events.filter { showHealing || $0.kind != .heal }.reversed()) { event in
-                    Button {
-                        playback.seek(to: event.date, leadIn: 1)
-                    } label: {
-                        RecapRow(event: event, death: marker.date)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .task(id: marker.id) {
-            state = .loading
-            do {
-                state = .loaded(try await model.deathRecap(for: marker))
-            } catch {
-                state = .failed(error.localizedDescription)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func summary(_ recap: DeathRecap) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if let blow = recap.killingBlow {
-                Text("Killed by \(blow.ability) from \(blow.source)")
-                    .fontWeight(.medium)
-            }
-            Text("Last \(Int(DeathRecap.window)) s: \(formatAmount(recap.damageTaken)) damage taken, \(formatAmount(recap.healingReceived)) healing")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
-private struct RecapRow: View {
-    let event: DeathRecap.Event
-    let death: Date
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text(offsetText)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .frame(width: 44, alignment: .trailing)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(event.ability).lineLimit(1)
-                Text(event.source)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 1) {
-                Text(amountText)
-                    .monospacedDigit()
-                    .fontWeight(event.isCritical ? .semibold : .regular)
-                    .foregroundStyle(event.kind == .heal ? .green : .red)
-                if let percent = event.healthPercent {
-                    HealthBar(percent: percent)
-                }
-            }
-        }
-        .contentShape(Rectangle())
-        .help(details)
-    }
-
-    /// Seconds before the death. Rounding would show "-0.0s" for the killing blow.
-    private var offsetText: String {
-        let offset = event.date.timeIntervalSince(death)
-        return abs(offset) < 0.05 ? "0.0s" : String(format: "%.1fs", offset)
-    }
-
-    private var amountText: String {
-        switch event.kind {
-        case .heal: "+\(formatAmount(event.amount))"
-        case .damage: "−\(formatAmount(event.amount))"
-        case .instakill: "Instant kill"
-        }
-    }
-
-    private var details: String {
-        var parts: [String] = []
-        if event.isCritical { parts.append("Critical") }
-        if event.absorbed > 0 { parts.append("\(formatAmount(event.absorbed)) absorbed") }
-        if event.overkill > 0 { parts.append("\(formatAmount(event.overkill)) overkill") }
-        if let health = event.health, let max = event.maxHealth {
-            parts.append("Health after: \(formatAmount(health)) of \(formatAmount(max))")
-        }
-        return parts.joined(separator: "\n")
-    }
-}
-
-private struct HealthBar: View {
-    let percent: Double
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Capsule()
-                .fill(.quaternary)
-                .frame(width: 40, height: 4)
-                .overlay(alignment: .leading) {
-                    Capsule().fill(color).frame(width: 40 * min(max(percent, 0), 100) / 100, height: 4)
-                }
-            Text("\(Int(percent.rounded()))%")
-                .font(.caption2)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .frame(width: 30, alignment: .trailing)
-        }
-    }
-
-    private var color: Color {
-        percent > 50 ? .green : percent > 25 ? .yellow : .red
-    }
-}
-
-private func formatAmount(_ amount: Int) -> String {
-    amount.formatted(.number.notation(.compactName).precision(.significantDigits(1...3)))
 }
 
 /// Free-form notes on a library activity, saved as you type.
