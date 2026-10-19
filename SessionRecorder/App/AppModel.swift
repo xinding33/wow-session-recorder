@@ -589,7 +589,12 @@ final class AppModel {
         var offersArchonDownload = false
         /// The saved file, waiting for Archon to restart and upload it.
         var fileAwaitingRestart: URL?
+        /// The saved file, offered to show in Finder.
+        var fileToShow: URL?
     }
+
+    /// Whether the first upload has explained what Archon needs before it uploads.
+    private static let archonSetupExplainedKey = "explainedArchonUploadSetup"
 
     var uploadNotice: UploadNotice?
     private(set) var isPreparingUpload = false
@@ -647,7 +652,10 @@ final class AppModel {
 
     /// Quits Archon and opens it again to upload `file`.
     func restartArchon(toUpload file: URL) {
+        guard !isPreparingUpload else { return }
+        isPreparingUpload = true
         Task {
+            defer { isPreparingUpload = false }
             guard await ArchonApp.quit(), let archon = ArchonApp.url else {
                 uploadNotice = UploadNotice(title: "Archon Didn't Quit",
                                             message: "Quit it yourself, then upload again.")
@@ -666,6 +674,15 @@ final class AppModel {
     private func openArchon(_ archon: URL, toUpload file: URL) async {
         do {
             try await ArchonApp.upload(file, with: archon)
+            // Archon waits without a word until it's set up, then uploads, so say what it needs once.
+            guard !UserDefaults.standard.bool(forKey: Self.archonSetupExplainedKey) else { return }
+            UserDefaults.standard.set(true, forKey: Self.archonSetupExplainedKey)
+            uploadNotice = UploadNotice(
+                title: "Uploading in Archon",
+                message: "Archon uploads \(file.lastPathComponent) once you're signed in to it and its Logs "
+                    + "folder is set, on its Logging → Live Log page. It uses the guild, region and visibility "
+                    + "last chosen there.",
+                fileToShow: file)
         } catch {
             NSWorkspace.shared.activateFileViewerSelecting([file])
             uploadNotice = UploadNotice(

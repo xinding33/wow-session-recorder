@@ -60,6 +60,9 @@ struct LibraryView: View {
                 Button("Restart Archon") { model.restartArchon(toUpload: file) }
                 Button("Choose the File in Archon") { model.chooseInArchon(file) }
                 Button("Cancel", role: .cancel) {}
+            } else if let file = notice.fileToShow {
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([file]) }
+                Button("OK", role: .cancel) {}
             } else if notice.offersArchonDownload {
                 Button("Get Archon App Lite") { NSWorkspace.shared.open(ArchonApp.downloadURL) }
                 Button("OK", role: .cancel) {}
