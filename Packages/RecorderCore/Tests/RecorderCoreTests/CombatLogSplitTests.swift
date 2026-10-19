@@ -111,6 +111,20 @@ struct CombatLogSplitTests {
         #expect(leftovers.isEmpty)
     }
 
+    @Test func copiesFromALogTheArchonAppArchived() throws {
+        let (folder, offsets) = try logs(["WoWCombatLog-100626_200448.txt": [header, "pull", "after"]])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let archive = folder.appending(path: "warcraftlogsarchive")
+        try FileManager.default.createDirectory(at: archive, withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: folder.appending(path: "WoWCombatLog-100626_200448.txt"),
+                                         to: archive.appending(path: "Archive-WoWCombatLog-100626_200448.txt"))
+        let lines = try #require(offsets["WoWCombatLog-100626_200448.txt"])
+        let destination = folder.appending(path: "Split.txt")
+        try CombatLogSplit.write([LogRange(fileName: "WoWCombatLog-100626_200448.txt", startOffset: lines[1],
+                                           endOffset: lines[1])], from: folder, to: destination)
+        #expect(try String(contentsOf: destination, encoding: .utf8) == "\(header)\r\npull\r\n")
+    }
+
     @Test func refusesWhatItCantCopy() throws {
         let (folder, _) = try logs(["a.txt": [header]])
         #expect(throws: CombatLogSplit.SplitError.inProgress(title: "Live")) {

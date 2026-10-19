@@ -50,8 +50,9 @@ Created in [T3 Code](https://t3.codes).
   and visibility last chosen in Archon. Archon only takes a file when it opens, so if it's
   already running the app offers to restart it, or to show the file in Finder for choosing in
   Archon instead. Archon waits to start the upload until you're signed in to it and its Logs
-  folder is set (Logging → Live Log, your `_retail_/Logs` folder); the first upload says so. Split files aren't deleted
-  automatically.
+  folder is set (Logging → Live Log, your `_retail_/Logs` folder); the first upload says so. Archon also archives combat logs a few days
+  old into `Logs/warcraftlogsarchive` unless that's turned off in it; uploads and death recaps
+  still find them there. Split files aren't deleted automatically.
 
 ## Install
 

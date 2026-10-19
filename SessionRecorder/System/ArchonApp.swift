@@ -45,10 +45,10 @@ enum ArchonApp {
     /// Asks each running copy to quit and waits for them to, returning false if one is still
     /// running after `timeout`.
     static func quit(timeout: Duration = .seconds(15)) async -> Bool {
-        let copies = runningCopies
-        copies.forEach { $0.terminate() }
+        runningCopies.forEach { $0.terminate() }
         let deadline = ContinuousClock.now + timeout
-        while copies.contains(where: { !$0.isTerminated }) {
+        // Asks afresh each time: `isTerminated` on the copies already in hand can lag.
+        while isRunning {
             guard ContinuousClock.now < deadline else { return false }
             try? await Task.sleep(for: .milliseconds(200))
         }

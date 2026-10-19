@@ -244,6 +244,24 @@ struct ReviewTests {
         #expect(CombatLogFiles.file(at: Date.distantPast, in: directory) == nil)
     }
 
+    @Test func findsLogsTheArchonAppArchived() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let archive = directory.appending(path: "warcraftlogsarchive")
+        try FileManager.default.createDirectory(at: archive, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try Data().write(to: directory.appending(path: "WoWCombatLog-100626_225830.txt"))
+        try Data().write(to: archive.appending(path: "Archive-WoWCombatLog-100626_200448.txt"))
+
+        #expect(CombatLogFiles.url(of: "WoWCombatLog-100626_225830.txt", in: directory)?.lastPathComponent
+                == "WoWCombatLog-100626_225830.txt")
+        #expect(CombatLogFiles.url(of: "WoWCombatLog-100626_200448.txt", in: directory)?.lastPathComponent
+                == "Archive-WoWCombatLog-100626_200448.txt")
+        #expect(CombatLogFiles.url(of: "WoWCombatLog-100526_200448.txt", in: directory) == nil)
+
+        let early = try #require(CombatLogFiles.startDate(fileName: "WoWCombatLog-100626_210000.txt"))
+        #expect(CombatLogFiles.file(at: early, in: directory)?.lastPathComponent == "Archive-WoWCombatLog-100626_200448.txt")
+    }
+
     /// A big synthetic log: one line every 10 ms for an hour, so finding the window needs both
     /// the timestamp search and the widening backwards read.
     @Test func readsTheWindowBeforeADeathFromALargeLog() throws {

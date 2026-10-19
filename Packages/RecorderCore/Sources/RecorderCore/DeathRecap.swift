@@ -160,6 +160,17 @@ public struct DeathRecap: Sendable, Equatable {
 
 /// Finding and reading parts of `WoWCombatLog-*.txt` files after the fact.
 public enum CombatLogFiles {
+    /// Where the Archon app (Warcraft Logs' uploader) moves logs a few days old, unless that's
+    /// turned off in it, renaming each `Archive-<name>`.
+    static let archiveFolderName = "warcraftlogsarchive"
+    static let archivePrefix = "Archive-"
+
+    /// The log named `fileName` in the Logs folder `directory`, or in Archon's archive there.
+    public static func url(of fileName: String, in directory: URL) -> URL? {
+        [directory.appending(path: fileName),
+         directory.appending(path: archiveFolderName).appending(path: archivePrefix + fileName)]
+            .first { FileManager.default.fileExists(atPath: $0.path) }
+    }
     /// When logging started, from a name like `WoWCombatLog-100626_225830.txt` (local time).
     public static func startDate(fileName: String, calendar: Calendar = .current) -> Date? {
         guard fileName.hasPrefix("WoWCombatLog-"), fileName.hasSuffix(".txt") else { return nil }
@@ -178,11 +189,18 @@ public enum CombatLogFiles {
         return calendar.date(from: components)
     }
 
-    /// The log that was being written at `date`: the newest one started before it.
+    /// The log that was being written at `date`: the newest one started before it, in the Logs
+    /// folder `directory` or in Archon's archive there.
     public static func file(at date: Date, in directory: URL) -> URL? {
-        let urls = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        return urls
-            .compactMap { url in startDate(fileName: url.lastPathComponent).map { (url, $0) } }
+        func contents(_ folder: URL) -> [URL] {
+            (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        }
+        let archived = contents(directory.appending(path: archiveFolderName)).compactMap { url -> (URL, String)? in
+            let name = url.lastPathComponent
+            return name.hasPrefix(archivePrefix) ? (url, String(name.dropFirst(archivePrefix.count))) : nil
+        }
+        return (contents(directory).map { ($0, $0.lastPathComponent) } + archived)
+            .compactMap { url, name in startDate(fileName: name).map { (url, $0) } }
             .filter { $0.1 <= date }
             .max { $0.1 < $1.1 }?
             .0

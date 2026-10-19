@@ -7,7 +7,7 @@ public enum CombatLogSplit {
         /// The activity was recorded before activities remembered where they are in the log.
         case notLogged(title: String)
         case inProgress(title: String)
-        /// The log file has been deleted or moved out of the Logs folder.
+        /// The log file has been deleted or moved out of the Logs folder (and Archon's archive in it).
         case logMissing(fileName: String)
         /// A clip saved while its activity was still going, whose activity has since been deleted,
         /// so where it ends in the log is unknown.
@@ -58,13 +58,16 @@ public enum CombatLogSplit {
         return ranges
     }
 
-    /// Writes `ranges` from the logs in `logs` to `destination`. Each log's first line, its
+    /// Writes `ranges` from the logs in the Logs folder `logs`, or Archon's archive there, to
+    /// `destination`. Each log's first line, its
     /// `COMBAT_LOG_VERSION` header, goes in before its ranges, as Warcraft Logs needs it to read
     /// the file. A range without an end runs to the end of its log.
     public static func write(_ ranges: [LogRange], from logs: URL, to destination: URL) throws {
         let fm = FileManager.default
-        for name in Set(ranges.map(\.fileName)) where !fm.fileExists(atPath: logs.appending(path: name).path) {
-            throw SplitError.logMissing(fileName: name)
+        var files: [String: URL] = [:]
+        for name in Set(ranges.map(\.fileName)) {
+            guard let url = CombatLogFiles.url(of: name, in: logs) else { throw SplitError.logMissing(fileName: name) }
+            files[name] = url
         }
         let partial = destination.deletingLastPathComponent()
             .appending(path: ".\(destination.lastPathComponent).partial")
@@ -74,7 +77,7 @@ public enum CombatLogSplit {
             defer { try? output.close() }
             var previousFile: String?
             for range in ranges {
-                let input = try FileHandle(forReadingFrom: logs.appending(path: range.fileName))
+                let input = try FileHandle(forReadingFrom: files[range.fileName]!)
                 defer { try? input.close() }
                 let size = try input.seekToEnd()
                 if range.fileName != previousFile, range.startOffset > 0,

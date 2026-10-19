@@ -564,8 +564,7 @@ final class AppModel {
         guard let retailFolder else { throw DeathRecapError.noLogsFolder }
         let logs = WoWInstall.logsFolder(in: retailFolder)
         // Newer death markers know their exact line; older ones are found by their time.
-        let hinted = marker.log.map { logs.appending(path: $0.fileName) }
-            .flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
+        let hinted = marker.log.flatMap { CombatLogFiles.url(of: $0.fileName, in: logs) }
         guard let url = hinted ?? CombatLogFiles.file(at: marker.date, in: logs) else { throw DeathRecapError.logMissing }
         let anchor = hinted != nil ? marker.log?.offset : nil
         let from = marker.date.addingTimeInterval(-DeathRecap.window)
