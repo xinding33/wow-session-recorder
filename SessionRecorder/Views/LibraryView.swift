@@ -56,7 +56,11 @@ struct LibraryView: View {
             isPresented: Binding(get: { model.uploadNotice != nil }, set: { if !$0 { model.uploadNotice = nil } }),
             presenting: model.uploadNotice
         ) { notice in
-            if notice.offersArchonDownload {
+            if let file = notice.fileAwaitingRestart {
+                Button("Restart Archon") { model.restartArchon(toUpload: file) }
+                Button("Choose the File in Archon") { model.chooseInArchon(file) }
+                Button("Cancel", role: .cancel) {}
+            } else if notice.offersArchonDownload {
                 Button("Get Archon App Lite") { NSWorkspace.shared.open(ArchonApp.downloadURL) }
                 Button("OK", role: .cancel) {}
             } else {
@@ -393,7 +397,7 @@ private struct SelectionSummary: View {
                     .disabled(favorites == 0)
                 Button("Upload to Warcraft Logs", systemImage: "arrow.up.doc") { model.uploadToWarcraftLogs(ids) }
                     .disabled(model.isPreparingUpload || activities.contains(where: \.isInProgress))
-                    .help("Save just these activities' combat log and open the Archon app to upload it")
+                    .help("Save just these activities' combat log and upload it with the Archon app")
                 Button("Delete…", systemImage: "trash", role: .destructive) { onDelete(ids) }
             }
             .controlSize(.large)
