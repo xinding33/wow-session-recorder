@@ -564,8 +564,7 @@ final class AppModel {
         guard let retailFolder else { throw DeathRecapError.noLogsFolder }
         let logs = WoWInstall.logsFolder(in: retailFolder)
         // Newer death markers know their exact line; older ones are found by their time.
-        let hinted = marker.log.map { logs.appending(path: $0.fileName) }
-            .flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
+        let hinted = marker.log.flatMap { CombatLogFiles.url(of: $0.fileName, in: logs) }
         guard let url = hinted ?? CombatLogFiles.file(at: marker.date, in: logs) else { throw DeathRecapError.logMissing }
         let anchor = hinted != nil ? marker.log?.offset : nil
         let from = marker.date.addingTimeInterval(-DeathRecap.window)
@@ -580,19 +579,27 @@ final class AppModel {
 
     // MARK: - Warcraft Logs
 
-    /// Why an upload couldn't be prepared, or that the Archon app is missing.
+    /// Why an upload couldn't be prepared, that the Archon app is missing, or that it has to
+    /// restart to be handed the file.
     struct UploadNotice: Identifiable {
         let id = UUID()
         let title: String
         let message: String
         var offersArchonDownload = false
+        /// The saved file, waiting for Archon to restart and upload it.
+        var fileAwaitingRestart: URL?
+        /// The saved file, offered to show in Finder.
+        var fileToShow: URL?
     }
+
+    /// Whether the first upload has explained what Archon needs before it uploads.
+    private static let archonSetupExplainedKey = "explainedArchonUploadSetup"
 
     var uploadNotice: UploadNotice?
     private(set) var isPreparingUpload = false
 
     /// Copies the activities' part of the combat log into a file of its own in WoW's Logs
-    /// folder, shows it in Finder and opens the Archon app, which uploads it to Warcraft Logs.
+    /// folder and opens the Archon app to upload it to Warcraft Logs.
     func uploadToWarcraftLogs(_ ids: Set<Activity.ID>) {
         guard !isPreparingUpload else { return }
         guard let retailFolder else {
@@ -621,16 +628,66 @@ final class AppModel {
                 uploadNotice = UploadNotice(title: "Couldn't Save the Combat Log", message: Self.message(for: error))
                 return
             }
-            NSWorkspace.shared.activateFileViewerSelecting([destination])
-            if let archon = ArchonApp.url {
-                ArchonApp.open(archon)
-            } else {
+            guard let archon = ArchonApp.url else {
+                NSWorkspace.shared.activateFileViewerSelecting([destination])
                 uploadNotice = UploadNotice(
                     title: "Install the Archon App",
                     message: "Saved \(destination.lastPathComponent) in WoW's Logs folder. Warcraft Logs uploads go "
                         + "through the Archon app or Archon App Lite: install one, then choose this file in it.",
                     offersArchonDownload: true)
+                return
             }
+            if ArchonApp.isRunning {
+                uploadNotice = UploadNotice(
+                    title: "Restart Archon to Upload?",
+                    message: "Archon only takes a file to upload when it opens, and it's already open. Restarting "
+                        + "it stops anything it's doing, like live logging.",
+                    fileAwaitingRestart: destination)
+            } else {
+                await openArchon(archon, toUpload: destination)
+            }
+        }
+    }
+
+    /// Quits Archon and opens it again to upload `file`.
+    func restartArchon(toUpload file: URL) {
+        guard !isPreparingUpload else { return }
+        isPreparingUpload = true
+        Task {
+            defer { isPreparingUpload = false }
+            guard await ArchonApp.quit(), let archon = ArchonApp.url else {
+                uploadNotice = UploadNotice(title: "Archon Didn't Quit",
+                                            message: "Quit it yourself, then upload again.")
+                return
+            }
+            await openArchon(archon, toUpload: file)
+        }
+    }
+
+    /// Shows `file` in Finder and brings Archon forward, to choose the file there.
+    func chooseInArchon(_ file: URL) {
+        NSWorkspace.shared.activateFileViewerSelecting([file])
+        if let archon = ArchonApp.url { ArchonApp.activate(archon) }
+    }
+
+    private func openArchon(_ archon: URL, toUpload file: URL) async {
+        do {
+            try await ArchonApp.upload(file, with: archon)
+            // Archon waits without a word until it's set up, then uploads, so say what it needs once.
+            guard !UserDefaults.standard.bool(forKey: Self.archonSetupExplainedKey) else { return }
+            UserDefaults.standard.set(true, forKey: Self.archonSetupExplainedKey)
+            uploadNotice = UploadNotice(
+                title: "Uploading in Archon",
+                message: "Archon uploads \(file.lastPathComponent) once you're signed in to it and its Logs "
+                    + "folder is set, on its Logging → Live Log page. It uses the guild, region and visibility "
+                    + "last chosen there.",
+                fileToShow: file)
+        } catch {
+            NSWorkspace.shared.activateFileViewerSelecting([file])
+            uploadNotice = UploadNotice(
+                title: "Couldn't Open Archon",
+                message: "\(error.localizedDescription) \(file.lastPathComponent) is saved in WoW's Logs folder, "
+                    + "so it can be chosen in Archon.")
         }
     }
 
