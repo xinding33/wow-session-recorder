@@ -38,6 +38,7 @@ final class AppModel {
 
     let settings: AppSettings
     let updates: AppUpdater
+    let tailscale: TailscaleController
     let thumbnails = ThumbnailStore()
     private(set) var captureState: CaptureState = .waitingForGame
     /// Newest first.
@@ -93,6 +94,7 @@ final class AppModel {
         let settings = AppSettings()
         self.settings = settings
         updates = AppUpdater(settings: settings)
+        tailscale = TailscaleController(settings: settings)
     }
 
     // MARK: - Lifecycle
@@ -122,6 +124,7 @@ final class AppModel {
         }
         gameWatcher = GameWatcher { [weak self] running in self?.gameRunningChanged(running) }
         gameWatcher?.start()
+        tailscale.start(isGameRunning: isGameRunning)
 
         housekeeping = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -146,6 +149,8 @@ final class AppModel {
         apply(tracker.endAll(at: Date()))
         await capture.stop()
         saveNow()
+        // An update restarting mid-game leaves Tailscale off for the new copy to carry on.
+        await tailscale.shutDown(handBack: !updates.isRelaunching)
     }
 
     // MARK: - Recording
@@ -174,6 +179,7 @@ final class AppModel {
     private func gameRunningChanged(_ running: Bool) {
         guard running != isGameRunning else { return }
         isGameRunning = running
+        tailscale.isGameRunning = running
         if running {
             gameQuitTask?.cancel()
             quitWhenLibraryCloses = false
@@ -244,6 +250,11 @@ final class AppModel {
     /// Quits now that WoW has, installing an update first if one is due. An app that only runs
     /// alongside WoW has no other moment for it.
     private func updateAndQuit() async {
+        // Quitting hands Tailscale back at once, so wait out its grace period first: reopening
+        // WoW in the meantime keeps it off, as it would if the recorder stayed open.
+        if let delay = tailscale.handBackDelay {
+            try? await Task.sleep(for: .seconds(delay))
+        }
         let updated = await updates.installAutomatically(while: { !self.isGameRunning && !self.isLibraryOpen })
         if isGameRunning || isLibraryOpen {
             // Back in use while that ran, so stay, on the new version if one went in.
@@ -772,6 +783,11 @@ final class AppModel {
             launchModeError = error.localizedDescription
             log.error("Launch mode: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    func setTurnTailscaleOffWithWoW(_ enabled: Bool) {
+        settings.turnTailscaleOffWithWoW = enabled
+        tailscale.settingChanged()
     }
 
     func addCompanionApp(_ url: URL) {

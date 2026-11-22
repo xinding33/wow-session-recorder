@@ -187,6 +187,26 @@ Settings → World of Warcraft → **Open WoW Session Recorder** has three choic
 background when WoW starts. If you choose, it quits them 30 seconds after WoW quits,
 giving them time to sync.
 
+## Tailscale
+
+Settings → World of Warcraft → **Turn Tailscale off while WoW is running** gives WoW a direct
+route to its servers. It's off until you turn it on, and needs the standalone Tailscale app from
+[tailscale.com](https://tailscale.com/download/mac), logged in.
+
+- Tailscale goes off when WoW opens and back on 10 seconds after it quits, so a quick restart
+  doesn't make it flap. The menu says what it's doing.
+- It only undoes what it did. If Tailscale was already off, it stays off, and if you turn it back
+  on mid-game, it's left alone until WoW quits.
+- Turning it back on is a bare `tailscale up`, which keeps your exit node, routes and DNS
+  settings. Quitting the recorder, or turning the setting off, turns Tailscale back on straight
+  away.
+- Before turning Tailscale off, the recorder notes that it did in
+  `~/Library/Application Support/WoW Session Recorder/tailscale-session.json`. After a crash,
+  logout or restart it turns Tailscale back on at launch if WoW isn't running.
+
+If you also use [Detour](https://github.com/xinding33/detour), take World of Warcraft out of its
+list so only one of them looks after Tailscale for WoW.
+
 ## Using it
 
 | Action | How |
@@ -244,10 +264,12 @@ Packages/RecorderCore/     Pure Swift logic, unit-tested with `swift test`
   ActivityFilter.swift       library search, filters and the choices they offer
   Thumbnails.swift           which frame a thumbnail shows, and its cache files
   Update.swift               finding, checking and installing a newer release
+  TailscalePolicy.swift      when to turn Tailscale off and back on, and what to leave alone
+  TailscaleCoordinator.swift saving that promise, retries and quitting around the policy
 SessionRecorder/           The app
   Capture/                   ScreenCaptureKit stream and HEVC segment writer
   CombatLog/                 log file tailer
-  System/                    WoW detection, global hotkeys, addon installer
+  System/                    WoW detection, global hotkeys, addon installer, Tailscale
   Views/                     menu bar, library, player, settings
 addon/SessionRecorderHelper/ The WoW addon (bundled into the app at build time)
 scripts/make-icon.swift      Draws the app icon; rerun after editing it
