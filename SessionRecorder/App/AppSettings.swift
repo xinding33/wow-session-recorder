@@ -55,6 +55,10 @@ final class AppSettings {
     /// Apps opened when WoW launches and, optionally, quit when it quits.
     var companionAppPaths: [String] { didSet { defaults.set(companionAppPaths, forKey: "companionAppPaths") } }
     var quitCompanionsWithWoW: Bool { didSet { defaults.set(quitCompanionsWithWoW, forKey: "quitCompanionsWithWoW") } }
+    /// Turns Tailscale off while WoW runs and back on after it quits.
+    var turnTailscaleOffWithWoW: Bool {
+        didSet { defaults.set(turnTailscaleOffWithWoW, forKey: "turnTailscaleOffWithWoW") }
+    }
     var recordingScope: RecordingScope { didSet { defaults.set(recordingScope.rawValue, forKey: "recordingScope") } }
     var autoUpdate: Bool { didSet { defaults.set(autoUpdate, forKey: "autoUpdate") } }
     var lastUpdateCheck: Date {
@@ -100,6 +104,7 @@ final class AppSettings {
             ?? (SMAppService.mainApp.status == .enabled ? .atLogin : .manual)
         companionAppPaths = defaults.stringArray(forKey: "companionAppPaths") ?? []
         quitCompanionsWithWoW = defaults.bool(forKey: "quitCompanionsWithWoW")
+        turnTailscaleOffWithWoW = defaults.bool(forKey: "turnTailscaleOffWithWoW")
         recordingScope = RecordingScope(rawValue: defaults.string(forKey: "recordingScope") ?? "") ?? .always
         autoUpdate = defaults.bool(forKey: "autoUpdate")
         hiddenMarkerCategories = Set((defaults.stringArray(forKey: "hiddenMarkerCategories") ?? []).compactMap(MarkerCategory.init))

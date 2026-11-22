@@ -160,6 +160,8 @@ private struct GameSettings: View {
 
             CompanionAppsSection()
 
+            TailscaleSection()
+
             Section {
                 LabeledContent("Install") {
                     if let folder = model.retailFolder {
@@ -400,5 +402,54 @@ private struct CompanionAppsSection: View {
         panel.prompt = "Add"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         model.addCompanionApp(url)
+    }
+}
+
+private struct TailscaleSection: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Section {
+            Toggle("Turn Tailscale off while WoW is running", isOn: Binding(
+                get: { model.settings.turnTailscaleOffWithWoW }, set: { model.setTurnTailscaleOffWithWoW($0) }))
+            if let summary = model.tailscale.summary {
+                LabeledContent {
+                    switch summary.fix {
+                    case .openTailscale: Button("Open Tailscale") { TailscaleActions.openTailscale(model.tailscale) }
+                    case .getTailscale: Button("Get Tailscale…") { TailscaleActions.getTailscale() }
+                    case nil: EmptyView()
+                    }
+                } label: {
+                    Text(summary.title)
+                        .foregroundStyle(summary.isProblem ? .orange : .primary)
+                    Text(summary.detail)
+                }
+            }
+        } header: {
+            Text("Tailscale")
+        } footer: {
+            Text("Gives WoW a direct route to its servers, then turns Tailscale back on \(Int(TailscaleTiming.grace)) seconds after WoW quits, with its exit node, routes and DNS settings as they were. Tailscale that was already off stays off, and turning it back on mid-game is left alone. Needs the standalone Tailscale app from tailscale.com.")
+                .foregroundStyle(.secondary)
+        }
+        .onAppear { model.tailscale.poll() }
+    }
+}
+
+/// Fixes the menu and Settings offer when Tailscale can't be controlled.
+@MainActor
+enum TailscaleActions {
+    static func getTailscale() {
+        NSWorkspace.shared.open(TailscaleApp.downloadPage)
+    }
+
+    static func openTailscale(_ controller: TailscaleController) {
+        guard let app = TailscaleClient.appURL else { return getTailscale() }
+        NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration()) { _, _ in
+            // Give it a moment to start before checking again.
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3))
+                controller.poll()
+            }
+        }
     }
 }

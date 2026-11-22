@@ -19,6 +19,8 @@ final class AppUpdater {
     private(set) var status: String?
     /// Whether restarting now would cut into a recording, so the offer to install can say so.
     @ObservationIgnored var isRecording: () -> Bool = { false }
+    /// Set when quitting so the new copy takes over, which carries on from what this one saved.
+    @ObservationIgnored private(set) var isRelaunching = false
 
     private let settings: AppSettings
     private let log = Logger(subsystem: "SessionRecorder", category: "Updates")
@@ -122,6 +124,7 @@ final class AppUpdater {
             return
         }
         log.info("Relaunching")
+        isRelaunching = true
         NSApp.terminateFromTask()
     }
 

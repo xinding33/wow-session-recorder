@@ -1,3 +1,4 @@
+import RecorderCore
 import SwiftUI
 
 struct MenuBarLabel: View {
@@ -48,6 +49,14 @@ struct MenuBarContent: View {
             Text("Combat log updated \(last, style: .relative) ago")
         } else {
             Text("Combat log: no recent writes")
+        }
+        if let tailscale = model.tailscale.summary {
+            Text(tailscale.title)
+            switch tailscale.fix {
+            case .openTailscale: Button("Open Tailscale") { TailscaleActions.openTailscale(model.tailscale) }
+            case .getTailscale: Button("Get Tailscale…") { TailscaleActions.getTailscale() }
+            case nil: EmptyView()
+            }
         }
 
         Divider()
